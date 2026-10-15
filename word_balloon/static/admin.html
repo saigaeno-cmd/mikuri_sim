@@ -62,6 +62,8 @@
 const $ = id => document.getElementById(id);
 const LABEL = { approved: '表示中', pending: '承認待ち', rejected: '非表示' };
 let key = sessionStorage.getItem('wb_admin') || '';
+const fromLink = new URLSearchParams(location.hash.slice(1)).get('key');   // リンク一覧の「管理者画面」から開いた場合
+if (fromLink) { key = fromLink; history.replaceState(null, '', location.pathname); }
 $('key').value = key;
 async function admin(path, body = {}) {
   const r = await fetch('/api/admin/' + path, { method: 'POST',

@@ -7,15 +7,17 @@
   /admin    管理ページ（要確認ワードの許可・非表示、削除、リセット。起動時に表示される管理キーが必要）
 """
 import argparse
+import html
 import json
 import os
 import secrets
 import socket
 import sys
+import webbrowser
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
-from urllib.parse import urlparse
+from urllib.parse import quote, urlparse
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from word_balloon.store import APPROVED, REJECTED, WordStore  # noqa: E402
@@ -34,6 +36,26 @@ def lan_ip() -> str:
             return s.getsockname()[0]
     except OSError:
         return "127.0.0.1"
+
+
+def make_links(answer_url: str, port: int, admin_key: str) -> dict:
+    """PC 用（管理者画面・投影画面）は localhost、スマホ用（回答ページ）は LAN/公開 URL。
+    管理者画面のリンクには管理キーを # 以降に付ける（# 以降はサーバーに送られず、ページが読んで消す）。"""
+    local = f"http://localhost:{port}"
+    return {
+        "admin": f"{local}/admin#key={quote(admin_key)}",
+        "screen": f"{local}/screen",
+        "answer": answer_url,
+    }
+
+
+def write_links_page(path: Path, links: dict) -> None:
+    """3つのリンクをまとめたページ（管理キーを含むので data/ に置き、配布しない）。"""
+    tpl = (STATIC / "links.html").read_text(encoding="utf-8")
+    for k, v in links.items():
+        tpl = tpl.replace("{{" + k + "}}", html.escape(v, quote=True))
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(tpl, encoding="utf-8")
 
 
 def read_list(path) -> list[str]:
@@ -125,6 +147,7 @@ def main(argv=None):
                    help="要確認ワード（1行1語、部分一致）。含む回答は管理者が許可するまでスクリーンに出さない")
     p.add_argument("--review-all", action="store_true", help="すべての新しいワードを管理者の許可制にする")
     p.add_argument("--public-url", help="参加者に案内する URL（省略時は LAN の IP から作成）")
+    p.add_argument("--open", action="store_true", help="起動後にリンク一覧をブラウザで開く")
     a = p.parse_args(argv)
 
     store = WordStore(Path(a.data), ng_words=read_list(a.ng), review_words=read_list(a.review),
@@ -133,13 +156,18 @@ def main(argv=None):
     answer_url = a.public_url or f"http://{lan_ip()}:{a.port}/"
 
     httpd = ThreadingHTTPServer((a.host, a.port), make_handler(store, admin_key, answer_url))
-    base = answer_url.rstrip("/")
+    links = make_links(answer_url, a.port, admin_key)
+    links_file = Path(a.data).parent / "links.html"
+    write_links_page(links_file, links)
     print("ワードバルーン サーバーを起動しました（Ctrl+C で終了）")
-    print(f"  回答ページ（参加者）: {answer_url}")
-    print(f"  スクリーン表示     : {base}/screen")
-    print(f"  管理ページ         : {base}/admin   管理キー: {admin_key}")
+    print(f"  管理者画面（PC）    : {links['admin']}")
+    print(f"  投影画面（PC）      : {links['screen']}")
+    print(f"  回答ページ（スマホ）: {links['answer']}")
+    print(f"  リンク一覧          : {links_file.resolve().as_uri()}")
     if a.review_all:
         print("  ※ すべての新しいワードは管理ページで許可するまでスクリーンに表示されません")
+    if a.open:
+        webbrowser.open(links_file.resolve().as_uri())
     try:
         httpd.serve_forever()
     except KeyboardInterrupt:
