@@ -9,31 +9,60 @@ import numpy as np
 import streamlit as st
 
 from .demand import base_hourly, build_demand, dest_shares
-from .loaders import file_hash, houses_path, load_config, load_houses, load_network, load_survey, survey_path
+from .loaders import file_hash, houses_path, load_config, load_houses_all, load_network, load_survey, survey_path
 
 
 @st.cache_resource
 def load_all():
     """設定・アンケート・事前計算結果（道路網の行列）を読むだけ。"""
     cfg = load_config()
-    houses_file, houses_sample = houses_path(cfg)
+    houses_files, houses_sample = houses_path(cfg)
     survey_file, survey_sample = survey_path(cfg)
     survey = load_survey(survey_file, cfg)
     net = load_network(cfg)
-    stale = net.meta.get("input_hash") != file_hash(houses_file)
-    load_houses(houses_file, cfg)  # 列の検証
-    if not cfg["simulation"].get("n_households"):
-        cfg["simulation"]["n_households"] = len(net.houses)
+    stale = net.meta.get("input_hash") != file_hash(*houses_files)
+    load_houses_all(cfg)  # 列の検証
     flags = {"houses_sample": houses_sample, "survey_sample": survey_sample, "stale": stale}
-    return cfg, survey, net, flags, file_hash(houses_file, survey_file)
+    return cfg, survey, net, flags, file_hash(*houses_files, survey_file)
 
 
-def load_or_stop():
+@st.cache_resource
+def _subset(_net, key, districts: tuple):
+    return _net.subset(districts)
+
+
+def district_sidebar(net, page: str) -> tuple:
+    """対象街区（複数あるときだけ表示）。選択は全ページ共通（ページごとのウィジェットに引き継ぐ）。"""
+    names = net.districts
+    if len(names) <= 1:
+        return tuple(names)
+    counts = net.houses["街区"].value_counts()
+    prev = [n for n in st.session_state.get("_districts", names) if n in names] or names
+    sel = st.sidebar.multiselect("対象街区", names, default=prev, key=f"districts_{page}",
+                                 format_func=lambda n: f"{n}（{counts[n]}戸）",
+                                 help="シミュレーションに含める街区。需要は対象街区の戸数で計算します。")
+    if not sel:
+        st.sidebar.warning("街区を1つ以上選んでください。全街区で計算します。")
+        sel = names
+    else:
+        st.session_state._districts = list(sel)
+    st.sidebar.caption(f"対象：{sum(counts[n] for n in sel)}戸")
+    return tuple(n for n in names if n in sel)
+
+
+def load_or_stop(page: str = "main"):
+    """（設定, アンケート, 対象街区の Network, フラグ, データキー）。設定の n_households は対象街区の戸数にする。"""
     try:
-        return load_all()
+        cfg, survey, net, flags, key = load_all()
     except (FileNotFoundError, ValueError) as e:
         st.error(str(e))
         st.stop()
+    sel = district_sidebar(net, page)
+    net = _subset(net, key, sel)
+    cfg = copy.deepcopy(cfg)
+    if not cfg["simulation"].get("n_households"):
+        cfg["simulation"]["n_households"] = len(net.houses)
+    return cfg, survey, net, flags, f"{key}|{','.join(sel)}"
 
 
 def header_warnings(net, flags):

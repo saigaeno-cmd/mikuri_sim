@@ -5,7 +5,7 @@
   1) 平日・晴れの1日を60回シミュレーションし、貸出失敗率 20%（充足率80%）・5%・1% 以下を満たす
      最小の「自転車＋キックボード」台数を探索
   2) 見つかった各案で1か月（平日・休日、気象は平年の出現日数から抽選）をシミュレーションし、年間費用を算出
-使い方: python scripts/run_study.py [--reps 10] [--procs 4] [--quick]
+使い方: python scripts/run_study.py [--reps 10] [--procs 4] [--districts 既存街区 新規街区] [--quick]
 """
 from __future__ import annotations
 
@@ -27,9 +27,9 @@ from src.study import annual_cost, min_fleet, month_eval  # noqa: E402
 G = {}
 
 
-def _init():
+def _init(districts=None):
     cfg = load_config()
-    net = load_network(cfg)
+    net = load_network(cfg).subset(districts)
     cfg["simulation"]["n_households"] = cfg["simulation"].get("n_households") or len(net.houses)
     G.update(cfg=cfg, net=net, survey=load_survey(survey_path(cfg)[0], cfg))
 
@@ -69,6 +69,7 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--reps", type=int, default=10)
     ap.add_argument("--procs", type=int, default=4)
+    ap.add_argument("--districts", nargs="*", default=None, help="対象街区（例：既存街区 新規街区）。省略で全街区")
     ap.add_argument("--n-rep", type=int, default=40, help="最小台数探索で1条件あたりの日数")
     ap.add_argument("--quick", action="store_true", help="動作確認用（条件を絞る）")
     a = ap.parse_args()
@@ -84,7 +85,7 @@ def main():
     out.mkdir(parents=True, exist_ok=True)
     print(f"{len(grid)} 条件 × {a.reps} 回 = {len(jobs)} 件")
     rows, t0 = [], time.time()
-    with Pool(a.procs, initializer=_init) as pool:
+    with Pool(a.procs, initializer=_init, initargs=(a.districts,)) as pool:
         for i, r in enumerate(pool.imap_unordered(run_one, jobs), 1):
             rows.extend(r)
             if i % 20 == 0 or i == len(jobs):
@@ -92,6 +93,7 @@ def main():
                 print(f"  {i}/{len(jobs)} 件  経過 {time.time() - t0:.0f} 秒", flush=True)
     pd.DataFrame(rows).to_csv(out / "results.csv", index=False, encoding="utf-8-sig")
     (out / "meta.json").write_text(json.dumps({"reps": a.reps, "n_rep": a.n_rep, "targets": targets,
+                                               "districts": a.districts or load_network(cfg).districts,
                                                "conditions": len(grid)}, ensure_ascii=False), encoding="utf-8")
     print("保存:", out / "results.csv")
 

@@ -1,1 +1,1 @@
-{"reps": 10, "n_rep": 40, "targets": [0.2, 0.05, 0.01], "conditions": 72}
+{"reps": 10, "n_rep": 40, "targets": [0.2, 0.05, 0.01], "conditions": 72, "districts": ["既存街区"]}

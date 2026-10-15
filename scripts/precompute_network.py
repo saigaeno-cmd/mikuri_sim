@@ -29,7 +29,7 @@ from scipy.spatial import ConvexHull, cKDTree
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from src.geo import LocalXY, haversine  # noqa: E402
-from src.loaders import file_hash, houses_path, load_config, load_houses, resolve  # noqa: E402
+from src.loaders import file_hash, houses_path, load_config, load_houses_all, resolve  # noqa: E402
 
 
 def fetch_osm(bbox, network_type: str, cache: Path) -> nx.MultiDiGraph:
@@ -155,9 +155,10 @@ def main():
     cfg = load_config(args.config) if args.config else load_config()
     out = resolve(cfg["paths"]["processed_dir"])
     out.mkdir(parents=True, exist_ok=True)
-    houses_csv, is_sample = houses_path(cfg)
-    houses = load_houses(houses_csv, cfg)
-    print(f"住宅: {len(houses)}戸 ({houses_csv}){' ※サンプル' if is_sample else ''}")
+    houses_files, is_sample = houses_path(cfg)
+    houses = load_houses_all(cfg)
+    per = "・".join(f"{k}{v}" for k, v in houses["街区"].value_counts(sort=False).items())
+    print(f"住宅: {len(houses)}戸（{per}）{' ※サンプル' if is_sample else ''}")
     osm_xml = resolve(cfg["paths"].get("osm_xml") or "data/raw/map.osm")
     if args.source == "auto":
         args.source = "xml" if osm_xml.exists() else "overpass"
@@ -246,14 +247,17 @@ def main():
     hs = houses.copy()
     hs["snap_offset_m"] = h_off.round(1)
     hs.to_csv(out / "houses_snapped.csv", index=False)
+    for name, g in hs.groupby("街区", sort=False):
+        print(f"  {name}: 道路までの直線距離 中央値 {g['snap_offset_m'].median():.0f}m・最大 {g['snap_offset_m'].max():.0f}m")
     cand.to_csv(out / "candidates.csv", index=False)
     meta = {
         "source": args.source,
         "created_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
         "dest_keys": dest_keys,
-        "houses_file": str(houses_csv),
+        "houses_file": [str(p) for p in houses_files],
+        "districts": houses["街区"].value_counts(sort=False).to_dict(),
         "is_sample": is_sample,
-        "input_hash": file_hash(houses_csv),
+        "input_hash": file_hash(*houses_files),
         "n_houses": len(houses), "n_candidates": len(cand),
         "walk_nodes": G_walk.number_of_nodes(), "bike_nodes": G_bike.number_of_nodes(),
         "bbox": bbox,

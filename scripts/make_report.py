@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import argparse
 import copy
+import json
 import datetime as dt
 import sys
 from pathlib import Path
@@ -368,7 +369,12 @@ def main():
     d = load_results(out_dir)
     sens = pd.read_csv(out_dir / "sensitivity.csv") if (out_dir / "sensitivity.csv").exists() else None
     buf = pd.read_csv(out_dir / "rebalance_buffer_test.csv") if (out_dir / "rebalance_buffer_test.csv").exists() else None
-    net = load_network(cfg)
+    meta_p = out_dir / "meta.json"
+    districts = json.loads(meta_p.read_text(encoding="utf-8")).get("districts") if meta_p.exists() else None
+    net = load_network(cfg).subset(districts)
+    n_h = len(net.houses)
+    dist_txt = "・".join(f"{k}{v}戸" for k, v in net.houses["街区"].value_counts(sort=False).items()) \
+        if "街区" in net.houses else f"{n_h}戸"
     cfg["simulation"]["n_households"] = cfg["simulation"].get("n_households") or len(net.houses)
     sv = load_survey(survey_path(cfg)[0], cfg)
     P = cfg["survey_xlsx"]["default_modes"]
@@ -528,7 +534,7 @@ def main():
             ("駅ポート容量", "18台（区画①のみ）・25台（基本）・32台（区画②も2列）"),
             ("目標", "貸出失敗率 20%（充足率80%）・5%・1% それぞれの最小台数"),
             ("1回の計算", f"①平日・晴れの1日×{40}回で最小台数を探索 → ②その台数で1か月（平日・休日・気象）→ ③年間費用"),
-            ("前提", "住宅171戸（今後追加予定）・駅は片道・イオンは往復・キックボードは電池交換で4時間停止")]
+            ("前提", f"住宅{n_h}戸（{dist_txt}）・駅は片道・イオンは往復・キックボードは電池交換で4時間停止")]
     table(s, 1.15, 3.1, 17.7, pd.DataFrame(rows, columns=["項目", "内容"]), col_w=[3.2, 14.5], size=15, row_h=0.62, left_cols=(0, 1))
     tb(s, 1.15, 8.3, 17.7, 1.8, [
         ("ばらつき＝同じ条件で乱数（利用希望の発生・気象の並び）だけを変えた10回の差。条件の差と区別して示す。",
@@ -779,7 +785,7 @@ def main():
           size=13, row_h=0.6)
     tb(s, 10.8, 6.3, 8.05, 4.0, [
         ("ずれの理由", {"bold": True, "color": NAVY, "size": 18}),
-        f"稼働率が他事例の1/{1.9 / rl['util']:.0f}〜1/{3.1 / rl['util']:.0f}：171戸の閉じた街区で、失敗率5%を守るために朝夕のピークに合わせた台数を持つため。日中は多くが待機。",
+        f"稼働率が他事例の1/{1.9 / rl['util']:.0f}〜1/{3.1 / rl['util']:.0f}：{n_h}戸の閉じた街区で、失敗率5%を守るために朝夕のピークに合わせた台数を持つため。日中は多くが待機。",
         "再配置の割合がやや高い：毎晩の初期配置への戻しを全日で行う前提。",
         "1台あたり費用は他事例とほぼ同じ水準。"], size=14, space_after=8)
     tb(s, 1.15, 8.3, 9.3, 2.0, [
@@ -928,7 +934,7 @@ def main():
     put(by_id(s, 39), "設計の確定")
     by_id(s, 39).top += Inches(0.15)
     put(by_id(s, 38), "住宅側3か所・運用a、駅ポートは需要で25か32台")
-    put(by_id(s, 41), "住宅の追加（171戸から増加）に合わせてポート数と台数を見直す。")
+    put(by_id(s, 41), f"住宅の追加（現在{n_h}戸）に合わせてポート数と台数を見直す。")
     put(by_id(s, 50), "STEP 03")
     put(by_id(s, 49), "実証で検証")
     by_id(s, 49).top += Inches(0.15)
@@ -937,7 +943,7 @@ def main():
 
     # 18 前提一覧
     s = frame("主な前提値と出典", "Assumptions", "詳細は docs/前提と出典.md、値はすべて config.yaml")
-    rows = [("住宅", "171戸（今後追加予定）", "確定"),
+    rows = [("住宅", f"{n_h}戸（{dist_txt}）", "確定"),
             ("調査", "2023年アンケート 23人（目的・時間帯・車種希望Q16）", "確定"),
             ("走行速度", "自転車12.6 km/h・キックボード14.0 km/h（走行ログ実測）", "確定"),
             ("ポート座標", "駅西口ポート 36.113177,139.712318／モビリティステーション 36.111012,139.709442", "確定"),

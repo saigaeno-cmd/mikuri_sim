@@ -1,6 +1,6 @@
 # 南栗橋BLP街区 モビリティシェア シミュレーター
 
-住宅（171戸、今後追加予定）と、南栗橋駅西口ポート・モビリティステーション（イオン）を、
+住宅（既存街区171戸＋新規街区59区画＝230戸）と、南栗橋駅西口ポート・モビリティステーション（イオン）を、
 電動アシスト自転車と電動キックボードの混在フリートで結ぶシェアリングの「ポート配置・台数・運用・費用」を検討するツール。
 
 ## 手順
@@ -13,7 +13,7 @@ Windows は `start_windows.bat`、Mac/Linux は `start_mac_linux.sh` でも起�
 
 ### バッチ計算と報告資料
 ```bash
-python scripts/run_study.py --reps 10 --procs 4     # 全72条件×10回 → data/output/study/results.csv（4コアで約2〜3時間）
+python scripts/run_study.py --reps 10 --procs 4     # 全72条件×10回（--districts 既存街区 で街区を限定） → data/output/study/results.csv（4コアで約2〜3時間）
 python scripts/run_sensitivity.py --procs 4         # 感度分析 → data/output/study/sensitivity.csv
 python scripts/make_report.py                       # 報告資料（要 requirements-dev.txt） → data/output/study/報告_モビリティシェア検討.pptx
 ```
@@ -28,7 +28,7 @@ python scripts/make_report.py                       # 報告資料（要 require
 | ① ポート最適化 | 需要（シナリオ or 転換率10%刻み）・車種比率・代替乗車・リバランス・駅ポート容量・手続き時間を指定 → 移動時間最小の住宅側ポート位置と、失敗率20%（充足率80%）・5%・1% の最小台数（自転車＋キックボード）。1日 or 1か月の結果、年間費用、a/b/c の比較 |
 | ② ポート配置評価 | 地図クリックでポートを追加し、自転車・キックボード台数と収納台数を指定 → 充足率・移動時間・返却失敗・費用。「自動配分」で台数を各ポートと駅に配分 |
 
-サイドバーの主な設定：駅ポートの容量（初期値25台、変更可）、目標充足率（初期値80%）、期間（1日／1か月）、キックボードの充電停止。
+サイドバーの主な設定：対象街区（既存・新規。選択は全ページ共通、需要は対象街区の戸数で計算）、駅ポートの容量（初期値25台、変更可）、目標充足率（初期値80%）、期間（1日／1か月）、キックボードの充電停止。
 
 ## モデル（`src/engine.py`）
 - **需要**：アンケート（2023、23世帯）の時間帯別トリップ ÷ 23 × 戸数 × 転換率 × 目的地比率。住宅⇔駅は片道（朝は駅へ、夕方は駅から）、イオンは往復。
@@ -47,10 +47,15 @@ python scripts/make_report.py                       # 報告資料（要 require
 
 前提値と出典は `docs/前提と出典.md`。値はすべて `config.yaml` にあり、画面とバッチ計算の両方に反映されます。
 
+### 街区の追加
+`config.yaml` の `paths.houses` に `{name: 街区名, file: data/raw/○○.geojson}` を追加し、
+`python scripts/precompute_network.py` を再実行する（GeoPackage / GeoJSON / CSV、点データ）。
+
 ## データ（data/raw/）
 | ファイル | 内容 |
 |---|---|
-| `houses.gpkg` | 住宅ポイント 171戸（追加したら precompute を再実行） |
+| `houses.gpkg` | 既存街区の住宅ポイント 171戸 |
+| `houses_new_lots_59.geojson` | 新規街区の区画ポイント 59区画（`lot_no`＝区画番号）。区画内道路は OSM 未収録のため、外周道路まで直線で接続 |
 | `map.osm` | OSM抽出（南栗橋駅〜街区〜イオン）。道路網の元 |
 | `survey.xlsx` | 2023アンケート集計表（曜日×5〜22時台×交通手段） |
 | `ride_logs/` | 走行記録（fit・スマホ位置ログ）と `speed_summary.csv`（自転車12.6・キックボード14.0 km/h） |

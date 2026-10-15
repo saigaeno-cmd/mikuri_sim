@@ -16,11 +16,11 @@ from src.loaders import ROOT
 from src.ui import demand_sidebar, header_warnings, load_or_stop, vehicle_radio
 from src.sensitivity import max_conversion_within, run_scenario, sweep_fleet, sweep_location
 
-BASE_CFG, SURVEY, NET, FLAGS, DATA_KEY = load_or_stop()
+BASE_CFG, SURVEY, NET, FLAGS, DATA_KEY = load_or_stop("sens")
 
 
 @st.cache_data(show_spinner="必要台数の感度分析を計算中…")
-def cached_fleet_sweep(cfg_json: str, purposes: tuple, share: float | None, opts_json: str, _key: str):
+def cached_fleet_sweep(cfg_json: str, purposes: tuple, share: float | None, opts_json: str, data_key: str):
     cfg = json.loads(cfg_json)
     return sweep_fleet(NET, SURVEY, cfg, purposes=list(purposes), station_share=share,
                        vehicles=list(cfg["vehicles"]), ks=range(1, cfg["simulation"]["max_ports"] + 1),
@@ -28,7 +28,7 @@ def cached_fleet_sweep(cfg_json: str, purposes: tuple, share: float | None, opts
 
 
 @st.cache_data(show_spinner="ポート位置の感度分析を計算中…")
-def cached_location_sweep(cfg_json: str, purposes: tuple, shares: tuple, opts_json: str, _key: str):
+def cached_location_sweep(cfg_json: str, purposes: tuple, shares: tuple, opts_json: str, data_key: str):
     cfg = json.loads(cfg_json)
     return sweep_location(NET, SURVEY, cfg, purposes=list(purposes), vehicles=list(cfg["vehicles"]),
                           ks=range(1, cfg["simulation"]["max_ports"] + 1), station_shares=list(shares),

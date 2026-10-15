@@ -1,6 +1,7 @@
 """CSV・事前計算結果の読込と検証。"""
 from __future__ import annotations
 
+import dataclasses
 import hashlib
 import json
 from dataclasses import dataclass
@@ -23,10 +24,24 @@ def resolve(path: str | Path) -> Path:
     return p if p.is_absolute() else ROOT / p
 
 
-def houses_path(cfg: dict) -> tuple[Path, bool]:
-    """(住宅ファイル, サンプルか)。raw に無ければ sample にフォールバック。"""
-    p = resolve(cfg["paths"]["houses"])
-    return (p, False) if p.exists() else (resolve(cfg["paths"]["sample_dir"]) / "houses.csv", True)
+def houses_files(cfg: dict) -> tuple[list[tuple[str, Path]], bool]:
+    """([(街区名, 住宅ファイル)], サンプルか)。paths.houses は1ファイル（文字列）か街区のリスト。
+    raw に無ければ sample にフォールバック。"""
+    h = cfg["paths"]["houses"]
+    items = [("街区", h)] if isinstance(h, str) else [(d["name"], d["file"]) for d in h]
+    files = [(n, resolve(f)) for n, f in items]
+    if all(p.exists() for _, p in files):
+        return files, False
+    missing = [str(p) for _, p in files if not p.exists()]
+    if len(missing) < len(files):
+        raise FileNotFoundError("住宅ファイルがありません：" + "、".join(missing))
+    return [("サンプル", resolve(cfg["paths"]["sample_dir"]) / "houses.csv")], True
+
+
+def houses_path(cfg: dict) -> tuple[list[Path], bool]:
+    """([住宅ファイル], サンプルか)。"""
+    files, sample = houses_files(cfg)
+    return [p for _, p in files], sample
 
 
 def survey_path(cfg: dict) -> tuple[Path, bool]:
@@ -81,7 +96,8 @@ def load_houses(path: Path, cfg: dict) -> pd.DataFrame:
         if not (g.geometry.geom_type == "Point").all():
             g = g.set_geometry(g.geometry.representative_point())
         df = pd.DataFrame({"lat": g.geometry.y.to_numpy(), "lon": g.geometry.x.to_numpy()})
-        ids = g["id"] if "id" in g.columns else None
+        idc = next((c for c in cfg["columns"]["houses"]["house_id"] if c in g.columns), None)
+        ids = g[idc] if idc else None
         if ids is not None and ids.notna().all() and ids.is_unique:
             df["house_id"] = ids.to_numpy()
     else:
@@ -90,6 +106,19 @@ def load_houses(path: Path, cfg: dict) -> pd.DataFrame:
         df["house_id"] = np.arange(1, len(df) + 1)
     df = df[["house_id", "lat", "lon"]].dropna(subset=["lat", "lon"]).reset_index(drop=True)
     return df
+
+
+def load_houses_all(cfg: dict) -> pd.DataFrame:
+    """全街区の住宅。列：house_id（通し番号）, lat, lon, 街区, 区画（元ファイルの番号）。"""
+    files, _ = houses_files(cfg)
+    parts = []
+    for name, p in files:
+        h = load_houses(p, cfg).rename(columns={"house_id": "区画"})
+        h["街区"] = name
+        parts.append(h)
+    df = pd.concat(parts, ignore_index=True)
+    df.insert(0, "house_id", np.arange(1, len(df) + 1))
+    return df[["house_id", "lat", "lon", "街区", "区画"]]
 
 
 def _parse_hour(v) -> int:
@@ -209,6 +238,20 @@ class Network:
     Wn: np.ndarray | None = None        # (n_houses, n_nodes) 住宅→全徒歩ノード 徒歩（-1=到達不能）
     Rn: np.ndarray | None = None        # (n_nodes, n_dest) 全徒歩ノード→目的地ポート 走行
     nodes: pd.DataFrame | None = None   # lat, lon, usable
+
+    @property
+    def districts(self) -> list[str]:
+        return list(dict.fromkeys(self.houses["街区"])) if "街区" in self.houses else []
+
+    def subset(self, districts) -> "Network":
+        """指定した街区の住宅だけにした Network（ポート候補・道路網はそのまま）。"""
+        if not districts or "街区" not in self.houses or set(districts) >= set(self.districts):
+            return self
+        m = self.houses["街区"].isin(list(districts)).to_numpy()
+        if not m.any():
+            raise ValueError(f"街区 {districts} の住宅がありません（{self.districts}）")
+        return dataclasses.replace(self, W=self.W[m], houses=self.houses[m].reset_index(drop=True),
+                                   Wn=None if self.Wn is None else self.Wn[m])
 
 
 def load_network(cfg: dict) -> Network:

@@ -16,7 +16,7 @@ from src.plan import demand_hourly, fleet_for, make_ops, optimal_layout
 from src.study import annual_cost, min_fleet, month_eval
 from src.ui import demand_sidebar, fresh_cfg, header_warnings, load_or_stop, ops_sidebar
 
-BASE_CFG, SURVEY, NET, FLAGS, DATA_KEY = load_or_stop()
+BASE_CFG, SURVEY, NET, FLAGS, DATA_KEY = load_or_stop("opt")
 cfg = fresh_cfg(BASE_CFG)
 
 with st.sidebar:
@@ -44,7 +44,7 @@ targets = tuple(sorted({round(1 - target_f, 4), 0.05, 0.01}, reverse=True))
 
 
 @st.cache_data(show_spinner="最小台数を探索中…（自転車×キックボードの組み合わせごとにシミュレーション）")
-def run_search(cfg_json, spec_key, ops_key, k, targets, _key):
+def run_search(cfg_json, spec_key, ops_key, k, targets, data_key):
     L, ports, assign = optimal_layout(NET, cfg, sh, k, ops_spec.ebike_share, station_cap=ops_spec.station_cap)
     ops = make_ops(cfg, weather=search_weather, pattern=ops_spec.pattern, substitution=ops_spec.substitution,
                    ebike_share=ops_spec.ebike_share, procedure_sec=ops_spec.procedure_sec)
@@ -54,7 +54,7 @@ def run_search(cfg_json, spec_key, ops_key, k, targets, _key):
 
 
 @st.cache_data(show_spinner="選んだ案を評価中…")
-def run_eval(cfg_json, spec_key, ops_key, k, nb, nk, _key, _L, _ops):
+def run_eval(cfg_json, spec_key, ops_key, k, nb, nk, data_key, _L, _ops):
     F = fleet_for(_L, nb, nk, oh, rh, _ops)
     day_res = simulate_days(_L, F, _ops, oh, rh, n_rep=ops_spec.n_rep, seed=1)
     m_sum, daily = month_eval(_L, F, cfg, {"平日": (oh_wd, rh_wd), "休日": (oh_hd, rh_hd)}, pattern=ops_spec.pattern,

@@ -119,14 +119,27 @@ def test_max_conversion_within_cap():
     assert station_slots(s, c, conversion=min(1, cmax + 0.02), purposes=None, station_share=None) > 10
 
 
-def test_load_houses_gpkg():
-    from src.loaders import houses_path, load_houses
-    path, is_sample = houses_path(CFG)
-    if is_sample or path.suffix != ".gpkg":
-        pytest.skip("実データ（gpkg）なし")
-    h = load_houses(path, CFG)
-    assert len(h) == 171
+def test_load_houses_districts():
+    from src.loaders import houses_path, load_houses_all
+    paths, is_sample = houses_path(CFG)
+    if is_sample:
+        pytest.skip("実データなし")
+    h = load_houses_all(CFG)
+    assert h["街区"].value_counts().to_dict() == {"既存街区": 171, "新規街区": 59}
+    assert h["house_id"].is_unique and len(h) == 230
+    new = h[h["街区"] == "新規街区"]
+    assert sorted(new["区画"]) == list(range(1, 60))                 # lot_no を区画番号として保持
     assert h["lat"].between(36.10, 36.12).all() and h["lon"].between(139.70, 139.72).all()
+
+
+def test_network_subset_districts():
+    net = _real_net()
+    if "街区" not in net.houses:
+        pytest.skip("事前計算が古い")
+    sub = net.subset(["新規街区"])
+    assert len(sub.houses) == 59 and sub.W.shape == (59, net.W.shape[1]) and sub.Wn.shape[0] == 59
+    assert (sub.houses["街区"] == "新規街区").all()
+    assert net.subset(None) is net and net.subset(net.districts) is net
 
 
 def test_survey_xlsx_weekday_totals():

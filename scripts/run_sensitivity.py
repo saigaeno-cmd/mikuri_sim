@@ -3,7 +3,7 @@
 基準：需要＝低位と高位の中間、(i) 代替乗車なし、駅ポート容量25台、手続き60秒、自転車比率60.3%、歩行4.8km/h、
       費用は config の値。目標＝貸出失敗率5%以下（平日・晴れの1日で探索）。
 推奨案：運用 a/b/c のうち、目標を満たす最小台数での年間総費用が最も小さいもの。
-使い方: python scripts/run_sensitivity.py [--procs 4]
+使い方: python scripts/run_sensitivity.py [--procs 4] [--districts 既存街区 新規街区]
 """
 from __future__ import annotations
 
@@ -51,9 +51,9 @@ COST_ONLY = {"車両単価": ("price_scale", 0.7, 1.3, [0.7, 0.85, 1.0, 1.15, 1.
              "軽トラック費": ("truck_scale", 0.5, 2.0, [0.5, 0.75, 1.0, 1.5, 2.0])}
 
 
-def _init():
+def _init(districts=None):
     cfg = load_config()
-    net = load_network(cfg)
+    net = load_network(cfg).subset(districts)
     cfg["simulation"]["n_households"] = cfg["simulation"].get("n_households") or len(net.houses)
     G.update(cfg=cfg, net=net, survey=load_survey(survey_path(cfg)[0], cfg))
 
@@ -88,6 +88,7 @@ def run_point(args):
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--procs", type=int, default=4)
+    ap.add_argument("--districts", nargs="*", default=None, help="対象街区（例：既存街区 新規街区）。省略で全街区")
     ap.add_argument("--n-rep", type=int, default=40)
     a = ap.parse_args()
     cfg = load_config()
@@ -99,7 +100,7 @@ def main():
     print(f"{len(jobs)} 件の探索")
     t0 = time.time()
     rows, keep = [], {}
-    with Pool(a.procs, initializer=_init) as pool:
+    with Pool(a.procs, initializer=_init, initargs=(a.districts,)) as pool:
         for i, (row, extra) in enumerate(pool.imap_unordered(run_point, jobs), 1):
             rows.append(row)
             if extra is not None:

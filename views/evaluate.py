@@ -17,7 +17,7 @@ from src.plan import custom_layout, demand_hourly, make_ops, optimal_layout
 from src.study import annual_cost, month_eval
 from src.ui import demand_sidebar, fresh_cfg, header_warnings, load_or_stop, ops_sidebar
 
-BASE_CFG, SURVEY, NET, FLAGS, DATA_KEY = load_or_stop()
+BASE_CFG, SURVEY, NET, FLAGS, DATA_KEY = load_or_stop("eval")
 cfg = fresh_cfg(BASE_CFG)
 COLS = ["name", "lat", "lon", "自転車", "キックボード", "収納"]
 MAX_SNAP_M = 300
@@ -154,7 +154,7 @@ if not edited.empty:
         if sum(F.n) == 0:
             st.info("台数を入力してください。")
         else:
-            key = json.dumps([cfg, spec.key(), ops_spec.key(), use[COLS].to_dict("list"), init.tolist()],
+            key = json.dumps([DATA_KEY, cfg, spec.key(), ops_spec.key(), use[COLS].to_dict("list"), init.tolist()],
                              ensure_ascii=False, default=str)
 
             @st.cache_data(show_spinner="シミュレーション中…")

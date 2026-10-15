@@ -23,9 +23,10 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--day", default="平日")
     ap.add_argument("--conversion", type=float, default=0.3)
+    ap.add_argument("--districts", nargs="*", default=None, help="対象街区。省略で全街区")
     args = ap.parse_args()
     cfg = load_config()
-    net = load_network(cfg)
+    net = load_network(cfg).subset(args.districts)
     cfg["simulation"]["n_households"] = cfg["simulation"].get("n_households") or len(net.houses)
     survey = load_survey(survey_path(cfg)[0], cfg)
     purposes = cfg.get("survey_xlsx", {}).get("default_modes") if "day" in survey.columns else None

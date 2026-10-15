@@ -1,10 +1,13 @@
 # 南栗橋BLP モビリティシェア シミュレーター設定
 # 座標の出典（2026-10 ご提供）：駅西口ポート・モビリティステーション・イオン入口1/2 は現地確認済みの座標。
 # 駅の改札（徒歩の最終目的地）は OSM の南栗橋駅ノード。座標を変えたら precompute を再実行。
-# 住宅：171戸（2026-10時点）。今後追加予定 → data/raw/houses.gpkg に追加して precompute を再実行する。
+# 住宅：既存街区171戸＋新規街区59区画＝230戸（2026-10時点）。街区は paths.houses に追加して precompute を再実行する。
+# 新規街区の区画内道路は OSM に未収録のため、各区画は街区外周の道路まで直線距離で接続している（道路が載ったら map.osm を更新）。
 
 paths:
-  houses: data/raw/houses.gpkg           # 住宅座標（GeoPackage / GeoJSON / CSV）
+  houses:                                # 住宅座標（街区ごと。GeoPackage / GeoJSON / CSV）。画面で対象街区を選べる
+    - {name: 既存街区, file: data/raw/houses.gpkg}
+    - {name: 新規街区, file: data/raw/houses_new_lots_59.geojson}
   osm_xml: data/raw/map.osm              # 道路網（OSM XML）。あれば Overpass に接続せずこれを使う
   survey_csv: data/raw/survey.xlsx       # 時間帯別トリップ数アンケート（23件）。xlsx（2023集計表）/ CSV
   sample_dir: data/sample                # raw が無い場合に使うサンプル
@@ -15,7 +18,7 @@ paths:
 # 列名の対応（左：内部名、右：CSV側で受け付ける列名の候補）
 columns:
   houses:
-    house_id: [house_id, id, 住戸ID, 住宅ID, 区画]
+    house_id: [house_id, id, lot_no, 住戸ID, 住宅ID, 区画]
     lat: [lat, latitude, 緯度, y]
     lon: [lon, lng, longitude, 経度, x]
   survey:
@@ -109,7 +112,7 @@ simulation:
   conversion_options: [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0]   # 画面で選べる転換率（10%刻み）
   max_ports: 8
   service_level: 0.95
-  n_households: null      # null なら住宅データの戸数（現データは171戸。今後追加予定）
+  n_households: null      # null なら対象街区の戸数（既存171・新規59）
   n_respondents: 23       # アンケート回答世帯数（トリップ0の世帯も含む）。null ならCSVの回答ID数
 
 # 気象条件（すべて仮定値。実測が得られたら置き換える）
