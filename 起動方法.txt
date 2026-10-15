@@ -1,0 +1,38 @@
+南栗橋BLP モビリティシェア シミュレーター　起動方法
+=====================================================
+
+■ 事前設定（初回のみ）
+1. Python をインストール（3.11 / 3.12 / 3.13 / 3.14 のどれでも可。新しく入れるなら 3.14）
+   https://www.python.org/downloads/ → 「Python 3.14.x」の Windows installer (64-bit)
+   インストール画面の一番下「Add python.exe to PATH」に必ずチェック → Install Now
+   確認：コマンドプロンプトで  py --version  → 「Python 3.14.x」など 3.11 以上ならOK
+2. zip を展開
+   zip を右クリック →「すべて展開」→ 展開先は C:\mobility_sim など短い場所がおすすめ
+   （zip を開いただけの状態では動きません）
+3. 初回はインターネット接続が必要（ライブラリのダウンロード）
+
+■ 起動
+1. 展開したフォルダの start_windows.bat をダブルクリック
+   「Windows によって PC が保護されました」→「詳細情報」→「実行」
+2. 初回は数分かかります。ファイアウォールの確認が出たら「アクセスを許可する」
+3. 「You can now view your Streamlit app」と出たらブラウザで
+     http://localhost:8501   （開かなければ http://127.0.0.1:8501 ）
+4. 使っている間は黒い画面を閉じない。終了は黒い画面で Ctrl+C
+
+2回目以降は start_windows.bat をダブルクリックするだけです。
+
+■ Mac の場合
+python.org から Python 3.14 (macOS installer) をインストール →
+ターミナルで  cd 展開したフォルダ  →  sh start_mac_linux.sh
+
+■ 手動で起動する場合（start_windows.bat が使えないとき）
+  cd C:\mobility_sim
+  py -3.14 -m venv .venv      （3.12 を使う場合は py -3.12）
+  .venv\Scripts\activate
+  python -m pip install -r requirements.txt
+  python -m streamlit run app.py
+
+■ うまくいかないとき
+・黒い画面のメッセージを確認（エラー内容が表示されます）
+・別の番号（8502 など）で起動していたら、表示された Local URL を開く
+・以前に別のバージョンでセットアップしていた場合や、やり直すとき：フォルダ内の .venv フォルダを削除して再度 start_windows.bat

@@ -1,0 +1,6 @@
+.venv/
+__pycache__/
+.pytest_cache/
+*.zip
+*.tmp
+data/output/study/_map.png

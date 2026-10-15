@@ -1,0 +1,7 @@
+-r requirements.txt
+# テスト用（python -m pytest）
+pytest>=8.0
+pulp>=2.8,<4      # 4.0 で API が変わったため 4 未満に固定（厳密解との照合のみで使用）
+# 報告資料（scripts/make_report.py）
+python-pptx>=1.0
+matplotlib>=3.8

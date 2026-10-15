@@ -1,0 +1,24 @@
+{
+  "source": "xml",
+  "created_at": "2026-10-14T16:33:30+00:00",
+  "dest_keys": [
+    "station",
+    "aeon"
+  ],
+  "houses_file": "/home/user/data/raw/houses.gpkg",
+  "is_sample": false,
+  "input_hash": "92dea512f5866eca",
+  "n_houses": 171,
+  "n_candidates": 56,
+  "walk_nodes": 781,
+  "bike_nodes": 533,
+  "bbox": [
+    139.70242839589835,
+    36.106178227735896,
+    139.7173724599612,
+    36.116801586423676
+  ],
+  "osm_xml": "/home/user/data/raw/map.osm",
+  "osm_xml_hash": "704997bc2d65b327",
+  "osmnx_version": "2.1.1"
+}

@@ -1,0 +1,218 @@
+# 南栗橋BLP モビリティシェア シミュレーター設定
+# 座標の出典（2026-10 ご提供）：駅西口ポート・モビリティステーション・イオン入口1/2 は現地確認済みの座標。
+# 駅の改札（徒歩の最終目的地）は OSM の南栗橋駅ノード。座標を変えたら precompute を再実行。
+# 住宅：171戸（2026-10時点）。今後追加予定 → data/raw/houses.gpkg に追加して precompute を再実行する。
+
+paths:
+  houses: data/raw/houses.gpkg           # 住宅座標（GeoPackage / GeoJSON / CSV）
+  osm_xml: data/raw/map.osm              # 道路網（OSM XML）。あれば Overpass に接続せずこれを使う
+  survey_csv: data/raw/survey.xlsx       # 時間帯別トリップ数アンケート（23件）。xlsx（2023集計表）/ CSV
+  sample_dir: data/sample                # raw が無い場合に使うサンプル
+  processed_dir: data/processed          # 事前計算結果（道路網・距離行列・ポート候補地点）
+  output_dir: data/output                # 最適ポート位置などの出力
+  candidates_csv: data/raw/candidates.csv  # 任意：ポート候補地点（lat, lon）。無ければ道路ノードから自動抽出
+
+# 列名の対応（左：内部名、右：CSV側で受け付ける列名の候補）
+columns:
+  houses:
+    house_id: [house_id, id, 住戸ID, 住宅ID, 区画]
+    lat: [lat, latitude, 緯度, y]
+    lon: [lon, lng, longitude, 経度, x]
+  survey:
+    respondent_id: [respondent_id, id, 回答ID, 回答者ID, 世帯ID]
+    hour: [hour, 時間帯, 時刻, 出発時刻, time_slot]
+    purpose: [purpose, 目的, 用途, 利用目的]
+    destination: [destination, 目的地, 行き先]
+    direction: [direction, 方向, 往復, 往路復路]
+    trips: [trips, トリップ数, 回数, 件数]
+
+destinations:
+  station:
+    label: 南栗橋駅
+    port_label: 駅西口ポート
+    port: {lat: 36.113177, lon: 139.712318}      # 駅西口ポート（確定）
+    entrances:                                   # 徒歩の最終目的地（複数あれば近い方を使う）
+      - {lat: 36.1132043, lon: 139.7129197}      # 駅（OSMの駅ノード）
+  aeon:
+    label: イオンスタイル南栗橋
+    port_label: モビリティステーション
+    port: {lat: 36.111012, lon: 139.709442}      # モビリティステーション（確定）
+    entrances:
+      - {lat: 36.110474, lon: 139.710256}        # イオン入口1（確定）
+      - {lat: 36.110132, lon: 139.709254}        # イオン入口2（確定）
+
+# 目的地名（アンケート側の表記）→ 内部キー
+destination_aliases:
+  station: [駅, 南栗橋駅, station, 通勤先(駅)]
+  aeon: [イオン, イオンスタイル, イオンスタイル南栗橋, aeon, スーパー]
+
+walk_speed_kmh: 4.8
+
+vehicles:
+  ebike:
+    label: 電動アシスト自転車
+    speed_kmh: 12.6       # 実測（車種コード ain、3本：距離計2,255m÷643秒、停止込み）data/raw/ride_logs/speed_summary.csv
+  kickboard:
+    label: 電動キックボード
+    speed_kmh: 14.0       # 実測（車種コード lsq 通常モード、3本：2,728m÷703秒）。20km/hモードは18.1km/h（参考）
+
+# 駅側ポート：1台あたりの区画
+station_port:
+  slot_width_m: 1.0
+  slot_depth_m: 2.0
+  max_slots: 25           # 駅ポート容量（基本25台＝区画①18台＋区画②1列7台）。画面で変更可
+  capacity_cases: {区画①のみ: 18, 基本: 25, 区画②も2列: 32}   # 感度分析用
+  # 区画①：駅舎前の歩道沿い 約6m×19m → 1列 約18台／区画②：広場の角 約6.5m×7.5m → 通路1.5m＋2列 約14台（保守的に1列7台）
+  # 寸法は航空写真からの推定（縮尺誤差 ±10%程度）
+
+# 2023アンケート集計表（xlsx）の読み方
+survey_xlsx:
+  sheet: トリップ数
+  return_from_hour: 12    # この時刻より前を往路（自宅→施設）、以降を復路とみなす
+  mode_labels: {A: 徒歩, B: 徒歩＋電車, C: 車, D: バイク}   # 表の凡例が読めない場合の既定
+  default_modes: [徒歩, 徒歩＋電車]                         # 表で「利用」と印のある手段＝転換対象の既定
+
+# 往路のみのアンケートの場合、復路を作るための用途別滞在時間（時間）
+dwell_hours:
+  通勤: 10
+  通学: 8
+  買物: 1
+  通院: 2
+  その他: 2
+default_dwell_hours: 2
+
+# 目的地情報がないアンケートの場合の、用途別の既定の目的地比率（駅の割合）
+default_station_share_by_purpose:
+  通勤: 1.0
+  通学: 1.0
+  買物: 0.0
+  通院: 0.5
+  その他: 0.5
+  # 2023アンケート（交通手段別）。目的地の設問が無いため仮定値：電車利用者は駅、徒歩のみはイオン
+  徒歩＋電車: 1.0
+  徒歩: 0.0
+  車: 0.5
+  バイク: 0.5
+
+candidates:
+  hull_buffer_m: 50       # 住宅の凸包からの外側バッファ
+  min_spacing_m: 20       # 候補地点の最小間隔
+
+network:
+  bbox_buffer_m: 400      # Overpass 取得時に住宅・目的地を囲む範囲に足す余白
+  # 走行（自転車・キックボード）で使わない道路種別。歩道(footway)は横断歩道(crossing)のみ通行可とする
+  ride_exclude_highway: [steps, corridor, pedestrian, path]
+  ride_allow_footway: [crossing]
+
+simulation:
+  conversion_rates: [0.10, 0.20, 0.30, 0.40, 0.50]   # 感度分析のグラフに並べる転換率
+  conversion_options: [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0]   # 画面で選べる転換率（10%刻み）
+  max_ports: 8
+  service_level: 0.95
+  n_households: null      # null なら住宅データの戸数（現データは171戸。今後追加予定）
+  n_respondents: 23       # アンケート回答世帯数（トリップ0の世帯も含む）。null ならCSVの回答ID数
+
+# 気象条件（すべて仮定値。実測が得られたら置き換える）
+#   demand: 晴れを1としたモビリティ利用需要の倍率（車種別）
+#   walk / ride: 晴れを1とした徒歩・走行速度の倍率（ride は車種別）
+weather:
+  晴れ: {demand: {ebike: 1.00, kickboard: 1.00}, walk: 1.00, ride: {ebike: 1.00, kickboard: 1.00}}
+  曇り: {demand: {ebike: 1.00, kickboard: 1.00}, walk: 1.00, ride: {ebike: 1.00, kickboard: 1.00}}
+  小雨: {demand: {ebike: 0.70, kickboard: 0.50}, walk: 0.95, ride: {ebike: 0.90, kickboard: 0.80}}
+  雨:   {demand: {ebike: 0.40, kickboard: 0.20}, walk: 0.90, ride: {ebike: 0.80, kickboard: 0.70}}
+  強風: {demand: {ebike: 0.80, kickboard: 0.60}, walk: 0.95, ride: {ebike: 0.85, kickboard: 0.80}}
+  猛暑: {demand: {ebike: 0.90, kickboard: 0.90}, walk: 0.90, ride: {ebike: 1.00, kickboard: 1.00}}
+  寒冷: {demand: {ebike: 0.85, kickboard: 0.80}, walk: 1.00, ride: {ebike: 0.95, kickboard: 0.95}}
+
+# 充足率シミュレーション（ポート最適化・配置評価ページ）
+service:
+  n_rep: 200              # モンテカルロの繰り返し回数
+  target_fulfillment: 0.80  # 最適化で目標とする充足率（＝1−貸出失敗率）
+  failure_targets: [0.05, 0.01]   # 貸出失敗率の目標（5%以下・1%以下）
+  aeon_max_slots: null    # イオンポートの上限台数（null=制限なし）
+  one_way: 0.2            # 旧ページ（感度分析）用。新モデルは下の trip_type で目的地ごとに指定
+  default_port_capacity: 10  # ②で地図から追加するポートの収納可能台数の初期値
+
+# ===== 2026-10 追加：運用モデル =====
+# 目的地ごとの移動の形（ご指示）：住宅⇔駅はすべて片道利用、イオン（モビリティステーション）はすべて往復利用
+trip_type: {station: one_way, aeon: round_trip}
+
+# 需要シナリオ（転換率としてアンケート需要に掛ける）
+#  低位・高位は都の資料（toshiseibi…katsuyo_kyogikai_r05-02-02）に基づき設定する予定。
+#  この作業環境から資料に接続できないため、暫定値として「シェアサイクル利用意向 約4割（国交省ガイドライン所載の
+#  2022年全国調査：普段自転車を使わない通勤者の約40%が利用したい）」× 実利用への移行率（低位30%・高位60%）を使う。
+demand_scenarios:
+  低位（暫定）: 0.12
+  高位（暫定）: 0.24
+  旧シナリオ10%: 0.10
+  旧シナリオ30%: 0.30
+
+# 混在フリート：利用者の希望車種の比率（別アンケート Q16「今後利用したい移動手段」：
+#   自転車（シェアリング）27.7%＝電動アシスト自転車、電動キックボード（シェアリング）18.2% → 60.3% : 39.7%）
+fleet_mix:
+  ebike_share: 0.603
+  substitution: false     # false=(i) 希望車種が無ければ利用しない／true=(ii) もう一方の車種に乗る
+
+procedure_sec: 60         # 貸出・返却の手続き時間（秒/回）。感度：30〜120秒
+
+# 電動キックボードの充電による稼働停止（仮定値）
+battery:
+  kickboard: {range_km: 30, swap_below: 0.2, out_hours: 4, nightly_charge: false}
+  ebike: {range_km: null}  # 電動アシスト自転車は電池切れによる停止を考慮しない
+
+# リバランス運用（軽トラック1台・作業員1名）
+rebalance:
+  patterns:
+    a: 夜（終電後）に1回、初期配置に戻す
+    b: a＋9:30に駅の余剰（夕方の駅→自宅の期待需要＋予備1台を超える分）を住宅側の不足に応じて戻す
+    c: b＋15:30に住宅側ポート（イオン往復用）と駅ポート（帰宅用）の在庫をそろえる
+  times: {b: 9.5, c: 15.5}
+  truck_capacity: {kickboard: 8, ebike: 4}
+  base_min: 30            # 作業1回あたり
+  per_vehicle_min: 3
+  extra_trip_min: 10      # 1回で運びきれない場合の往復1回ごと
+  # b・c で駅に残す台数。null＝「夕方の期待需要＋1台」（指定どおり）。0.95 などにするとポアソン分布の95%点を残す
+  station_buffer_q: null
+
+# 1か月シミュレーション
+month:
+  year: 2026
+  month: 11
+  # 祝日（内閣府「国民の祝日」2026年）。休日＝土日＋祝日
+  holidays_2026: [2026-01-01, 2026-01-12, 2026-02-11, 2026-02-23, 2026-03-20, 2026-04-29, 2026-05-03, 2026-05-04,
+                  2026-05-05, 2026-05-06, 2026-07-20, 2026-08-11, 2026-09-21, 2026-09-22, 2026-09-23, 2026-10-12,
+                  2026-11-03, 2026-11-23]
+
+# 月別の気象の出現日数（日/月）。気象庁 平年値（1991〜2020、熊谷）を参考にした概算値。
+#   この作業環境から気象庁サイトに接続できなかったため、記憶にもとづく概数 → 要確認（久喜または熊谷の平年値で置換）
+#   rain10=日降水量10mm以上の日、rain1=1mm以上の日（10mm以上を含む）、hot=最高35℃以上、wind=最大風速10m/s以上、cold=最低0℃未満
+climate:
+  1:  {rain1: 4.1,  rain10: 1.3, hot: 0.0, wind: 3.0, cold: 24.0}
+  2:  {rain1: 5.0,  rain10: 1.5, hot: 0.0, wind: 3.5, cold: 18.0}
+  3:  {rain1: 8.6,  rain10: 3.0, hot: 0.0, wind: 4.0, cold: 7.0}
+  4:  {rain1: 9.0,  rain10: 3.5, hot: 0.0, wind: 3.0, cold: 0.5}
+  5:  {rain1: 9.6,  rain10: 3.8, hot: 0.1, wind: 1.5, cold: 0.0}
+  6:  {rain1: 11.9, rain10: 4.3, hot: 0.6, wind: 0.5, cold: 0.0}
+  7:  {rain1: 12.4, rain10: 4.6, hot: 5.5, wind: 0.5, cold: 0.0}
+  8:  {rain1: 9.2,  rain10: 4.0, hot: 8.0, wind: 0.5, cold: 0.0}
+  9:  {rain1: 11.3, rain10: 5.1, hot: 1.0, wind: 0.5, cold: 0.0}
+  10: {rain1: 9.6,  rain10: 4.3, hot: 0.0, wind: 0.5, cold: 0.0}
+  11: {rain1: 6.5,  rain10: 2.3, hot: 0.0, wind: 1.0, cold: 2.0}
+  12: {rain1: 4.0,  rain10: 1.2, hot: 0.0, wind: 2.0, cold: 18.0}
+
+# 費用（年間）
+cost:
+  price: {kickboard: 150000, ebike: 150000}   # 円/台（キックボード中心価格帯10〜30万円、アシスト自転車相場10〜20万円）
+  price_reference_4wheel: 450000              # 4輪特定小型（参考：SAGA life 39万円台、BLAZE e-CARGO 54.78万円）
+  life_years: 3
+  maintenance: 15000                          # 円/台/年（自賠責・税・電気代 1.1〜1.5万円）
+  port_initial: 200000                        # 円/か所、5年償却（直接の根拠なし→感度で×0.5〜×2）
+  port_life_years: 5
+  land_per_slot_month: 600                    # 円/台分/月（LUUP設置協力費 月500〜700円/台の中央値）
+  labor_per_hour: 1500                        # 円/時（埼玉県最低賃金1,196円＋事業者負担約25%）
+  truck_per_op: 500                           # 円/回（直接の根拠なし→感度で×0.5〜×2）
+  days: {平日: 245, 休日: 120}
+  benchmarks:
+    中野区シェアサイクル区負担（2020年度）: "約12.8万円/台/年"
+    再配置費用の割合（国交省資料）: "運営費の3〜4割"
+    国内の稼働率: "1.9〜3.1回/台/日"
