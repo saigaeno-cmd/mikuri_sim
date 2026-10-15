@@ -1,0 +1,84 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>気になるワード - 管理</title>
+<style>
+  * { box-sizing: border-box; }
+  body { margin:0; font-family: system-ui, -apple-system, "Hiragino Sans", "Yu Gothic UI", sans-serif; background:#f4f7fb; color:#1d2433; }
+  main { max-width: 720px; margin: 0 auto; padding: 24px 16px; }
+  h1 { font-size: 1.3rem; }
+  .row { display:flex; gap:8px; align-items:center; flex-wrap: wrap; }
+  input { font-size: 1rem; padding: 8px 10px; border: 1px solid #c8d0dc; border-radius: 8px; }
+  button { font-size: .95rem; padding: 8px 14px; border: 0; border-radius: 8px; background:#2f6fde; color:#fff; cursor:pointer; }
+  button.danger { background:#d64545; }
+  table { width:100%; border-collapse: collapse; margin-top: 16px; background:#fff; border-radius: 12px; overflow:hidden; }
+  th, td { padding: 8px 12px; border-bottom: 1px solid #eef1f5; text-align:left; }
+  td.n { text-align:right; font-variant-numeric: tabular-nums; }
+  #msg { color:#d64545; min-height: 1.4em; }
+  #panel[hidden] { display:none; }
+</style>
+</head>
+<body>
+<main>
+  <h1>管理ページ</h1>
+  <div class="row">
+    <input id="key" type="password" placeholder="管理キー（起動時に表示）" aria-label="管理キー">
+    <button id="login">確認</button>
+  </div>
+  <p id="msg"></p>
+  <section id="panel" hidden>
+    <div class="row">
+      <span>回答数 <b id="total">0</b> 件 / ワード <b id="kinds">0</b> 種類</span>
+      <span style="flex:1"></span>
+      <button class="danger" id="reset">すべてリセット</button>
+    </div>
+    <table>
+      <thead><tr><th>ワード</th><th style="text-align:right">回答数</th><th></th></tr></thead>
+      <tbody id="list"></tbody>
+    </table>
+  </section>
+</main>
+<script>
+const $ = id => document.getElementById(id);
+let key = sessionStorage.getItem('wb_admin') || '';
+$('key').value = key;
+async function admin(path, body = {}) {
+  const r = await fetch('/api/admin/' + path, { method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'X-Admin-Key': key }, body: JSON.stringify(body) });
+  const d = await r.json();
+  if (!d.ok && d.error) throw new Error(d.error);
+  return d;
+}
+async function load() {
+  const d = await (await fetch('/api/words', { cache: 'no-store' })).json();
+  $('total').textContent = d.total; $('kinds').textContent = d.words.length;
+  const tb = $('list'); tb.innerHTML = '';
+  for (const w of d.words) {
+    const tr = document.createElement('tr');
+    tr.innerHTML = '<td></td><td class="n"></td><td style="text-align:right"><button class="danger">削除</button></td>';
+    tr.cells[0].textContent = w.word; tr.cells[1].textContent = w.count;
+    tr.querySelector('button').onclick = async () => {
+      if (!confirm(`「${w.word}」を削除しますか？`)) return;
+      try { await admin('delete', { key: w.key }); load(); } catch (e) { $('msg').textContent = e.message; }
+    };
+    tb.appendChild(tr);
+  }
+}
+$('login').onclick = async () => {
+  key = $('key').value.trim();
+  try {
+    await admin('check'); sessionStorage.setItem('wb_admin', key);
+    $('msg').textContent = ''; $('panel').hidden = false; load();
+  } catch (e) { $('msg').textContent = e.message; $('panel').hidden = true; }
+};
+$('reset').onclick = async () => {
+  if (!confirm('すべての回答を削除します。よろしいですか？')) return;
+  try { await admin('reset'); load(); } catch (e) { $('msg').textContent = e.message; }
+};
+setInterval(() => { if (!$('panel').hidden) load(); }, 3000);
+if (key) $('login').click();
+</script>
+</body>
+</html>

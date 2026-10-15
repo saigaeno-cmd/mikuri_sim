@@ -3,6 +3,9 @@
 住宅（171戸、今後追加予定）と、南栗橋駅西口ポート・モビリティステーション（イオン）を、
 電動アシスト自転車と電動キックボードの混在フリートで結ぶシェアリングの「ポート配置・台数・運用・費用」を検討するツール。
 
+## 同梱ツール：気になるワード バルーン表示
+会場アンケートの回答ワードをスクリーンにバルーン表示するアプリは `word_balloon/` にあります（`python word_balloon/server.py`、詳細は `word_balloon/README.md`）。
+
 ## 手順
 ```bash
 pip install -r requirements.txt        # Python 3.11〜3.14（テストも行う場合は requirements-dev.txt）

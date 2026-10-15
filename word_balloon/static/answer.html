@@ -1,0 +1,78 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>気になるワード</title>
+<style>
+  :root { --bg:#f4f7fb; --card:#fff; --ink:#1d2433; --sub:#5b6577; --accent:#ff6f61; --ok:#2e9e6a; --err:#d64545; }
+  * { box-sizing: border-box; }
+  body { margin:0; font-family: system-ui, -apple-system, "Hiragino Sans", "Yu Gothic UI", sans-serif;
+         background: var(--bg); color: var(--ink); min-height: 100vh; display:flex; justify-content:center; }
+  main { width: 100%; max-width: 480px; padding: 32px 16px; }
+  h1 { font-size: 1.5rem; margin: 0 0 8px; }
+  p.lead { color: var(--sub); margin: 0 0 24px; line-height: 1.6; }
+  .card { background: var(--card); border-radius: 16px; padding: 20px; box-shadow: 0 4px 16px rgba(0,0,0,.06); }
+  input { width: 100%; font-size: 1.25rem; padding: 14px; border: 2px solid #d5dbe5; border-radius: 12px; outline: none; }
+  input:focus { border-color: var(--accent); }
+  .count { text-align: right; color: var(--sub); font-size: .85rem; margin-top: 6px; }
+  button { width: 100%; margin-top: 12px; font-size: 1.2rem; font-weight: 700; padding: 14px; border: 0; border-radius: 12px;
+           background: var(--accent); color: #fff; cursor: pointer; }
+  button:disabled { opacity: .5; cursor: default; }
+  .msg { min-height: 1.5em; margin-top: 12px; font-weight: 600; }
+  .msg.ok { color: var(--ok); } .msg.err { color: var(--err); }
+  h2 { font-size: 1rem; color: var(--sub); margin: 28px 0 8px; }
+  ul { list-style: none; padding: 0; margin: 0; display: flex; flex-wrap: wrap; gap: 8px; }
+  li { background: #ffe4e0; color: #9a2d22; padding: 6px 12px; border-radius: 999px; }
+</style>
+</head>
+<body>
+<main>
+  <h1>🎈 気になるワードを教えてください</h1>
+  <p class="lead">入力したワードは会場のスクリーンにバルーンで表示されます。何回でも回答できます。</p>
+  <form class="card" id="f">
+    <input id="w" maxlength="20" autocomplete="off" placeholder="例：自動運転" aria-label="気になるワード" required>
+    <div class="count"><span id="n">0</span> / 20</div>
+    <button id="b" type="submit">送信する</button>
+    <div class="msg" id="m" role="status"></div>
+  </form>
+  <h2>あなたが送ったワード</h2>
+  <ul id="h"></ul>
+</main>
+<script>
+const f = document.getElementById('f'), w = document.getElementById('w'), b = document.getElementById('b'),
+      m = document.getElementById('m'), n = document.getElementById('n'), h = document.getElementById('h');
+const COOLDOWN_MS = 3000;
+let sent = [];
+try { sent = JSON.parse(localStorage.getItem('wb_sent') || '[]'); } catch (e) {}
+function renderHistory() {
+  h.innerHTML = '';
+  sent.slice(-30).reverse().forEach(t => { const li = document.createElement('li'); li.textContent = t; h.appendChild(li); });
+}
+renderHistory();
+w.addEventListener('input', () => { n.textContent = [...w.value].length; });
+f.addEventListener('submit', async e => {
+  e.preventDefault();
+  const word = w.value.trim();
+  if (!word) return;
+  b.disabled = true; m.className = 'msg'; m.textContent = '送信中…';
+  try {
+    const r = await fetch('/api/answer', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+                                           body: JSON.stringify({ word }) });
+    const d = await r.json();
+    if (d.ok) {
+      m.className = 'msg ok'; m.textContent = `「${d.word}」を送信しました！`;
+      sent.push(d.word);
+      try { localStorage.setItem('wb_sent', JSON.stringify(sent.slice(-30))); } catch (e) {}
+      renderHistory(); w.value = ''; n.textContent = '0';
+    } else {
+      m.className = 'msg err'; m.textContent = d.error || '送信できませんでした';
+    }
+  } catch (err) {
+    m.className = 'msg err'; m.textContent = '通信エラーです。もう一度お試しください。';
+  }
+  setTimeout(() => { b.disabled = false; }, COOLDOWN_MS);
+});
+</script>
+</body>
+</html>

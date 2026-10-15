@@ -4,3 +4,4 @@ __pycache__/
 *.zip
 *.tmp
 data/output/study/_map.png
+word_balloon/data/
