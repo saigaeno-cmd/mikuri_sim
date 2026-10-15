@@ -7,15 +7,24 @@
 <style>
   * { box-sizing: border-box; }
   body { margin:0; font-family: system-ui, -apple-system, "Hiragino Sans", "Yu Gothic UI", sans-serif; background:#f4f7fb; color:#1d2433; }
-  main { max-width: 720px; margin: 0 auto; padding: 24px 16px; }
+  main { max-width: 760px; margin: 0 auto; padding: 24px 16px; }
   h1 { font-size: 1.3rem; }
+  h2 { font-size: 1.05rem; margin: 28px 0 8px; }
   .row { display:flex; gap:8px; align-items:center; flex-wrap: wrap; }
   input { font-size: 1rem; padding: 8px 10px; border: 1px solid #c8d0dc; border-radius: 8px; }
-  button { font-size: .95rem; padding: 8px 14px; border: 0; border-radius: 8px; background:#2f6fde; color:#fff; cursor:pointer; }
-  button.danger { background:#d64545; }
-  table { width:100%; border-collapse: collapse; margin-top: 16px; background:#fff; border-radius: 12px; overflow:hidden; }
+  button { font-size: .9rem; padding: 7px 12px; border: 0; border-radius: 8px; background:#2f6fde; color:#fff; cursor:pointer; white-space: nowrap; }
+  button.ok { background:#2e9e6a; } button.hide { background:#7a8494; } button.danger { background:#d64545; }
+  table { width:100%; border-collapse: collapse; background:#fff; border-radius: 12px; overflow:hidden; }
   th, td { padding: 8px 12px; border-bottom: 1px solid #eef1f5; text-align:left; }
   td.n { text-align:right; font-variant-numeric: tabular-nums; }
+  td.act { text-align:right; } td.act button { margin-left: 4px; }
+  .pending-box { background:#fff6e0; border: 2px solid #f0b400; border-radius: 12px; padding: 12px; }
+  .pending-box table { background: transparent; }
+  .none { color:#5b6577; margin: 4px 0; }
+  .badge { display:inline-block; padding: 2px 8px; border-radius: 999px; font-size: .8rem; font-weight: 700; }
+  .badge.approved { background:#e0f4ea; color:#1f7a50; }
+  .badge.pending { background:#fff0c2; color:#8a6400; }
+  .badge.rejected { background:#e6e9ee; color:#5b6577; }
   #msg { color:#d64545; min-height: 1.4em; }
   #panel[hidden] { display:none; }
 </style>
@@ -34,14 +43,24 @@
       <span style="flex:1"></span>
       <button class="danger" id="reset">すべてリセット</button>
     </div>
+
+    <h2>⚠ 承認待ち（<span id="pcount">0</span>件）</h2>
+    <div class="pending-box">
+      <p class="none" id="pnone">承認待ちのワードはありません。</p>
+      <table><tbody id="pending"></tbody></table>
+    </div>
+    <p class="none">要確認ワード（review_words.txt）を含む回答は、「表示する」を押すまでスクリーンに出ません。</p>
+
+    <h2>すべてのワード</h2>
     <table>
-      <thead><tr><th>ワード</th><th style="text-align:right">回答数</th><th></th></tr></thead>
+      <thead><tr><th>ワード</th><th style="text-align:right">回答数</th><th>状態</th><th></th></tr></thead>
       <tbody id="list"></tbody>
     </table>
   </section>
 </main>
 <script>
 const $ = id => document.getElementById(id);
+const LABEL = { approved: '表示中', pending: '承認待ち', rejected: '非表示' };
 let key = sessionStorage.getItem('wb_admin') || '';
 $('key').value = key;
 async function admin(path, body = {}) {
@@ -51,19 +70,40 @@ async function admin(path, body = {}) {
   if (!d.ok && d.error) throw new Error(d.error);
   return d;
 }
+async function act(path, w, confirmText) {
+  if (confirmText && !confirm(confirmText)) return;
+  try { await admin(path, { key: w.key }); load(); } catch (e) { $('msg').textContent = e.message; }
+}
+function button(label, cls, onclick) {
+  const b = document.createElement('button'); b.textContent = label; b.className = cls; b.onclick = onclick; return b;
+}
+function actions(w) {
+  const td = document.createElement('td'); td.className = 'act';
+  if (w.status !== 'approved') td.appendChild(button('表示する', 'ok', () => act('approve', w)));
+  if (w.status !== 'rejected') td.appendChild(button('非表示にする', 'hide', () => act('reject', w)));
+  td.appendChild(button('削除', 'danger', () => act('delete', w, `「${w.word}」を削除しますか？（回答数も消えます）`)));
+  return td;
+}
 async function load() {
-  const d = await (await fetch('/api/words', { cache: 'no-store' })).json();
-  $('total').textContent = d.total; $('kinds').textContent = d.words.length;
+  let d;
+  try { d = await admin('words'); } catch (e) { $('msg').textContent = e.message; return; }
+  $('total').textContent = d.words.reduce((s, w) => s + w.count, 0); $('kinds').textContent = d.words.length;
+  const pend = d.words.filter(w => w.status === 'pending');
+  $('pcount').textContent = pend.length; $('pnone').hidden = pend.length > 0;
+  document.title = (pend.length ? `(${pend.length}) ` : '') + '気になるワード - 管理';
+  const pb = $('pending'); pb.innerHTML = '';
+  for (const w of pend) {
+    const tr = document.createElement('tr');
+    tr.innerHTML = '<td></td><td class="n"></td>';
+    tr.cells[0].textContent = w.word; tr.cells[1].textContent = w.count + '件';
+    tr.appendChild(actions(w)); pb.appendChild(tr);
+  }
   const tb = $('list'); tb.innerHTML = '';
   for (const w of d.words) {
     const tr = document.createElement('tr');
-    tr.innerHTML = '<td></td><td class="n"></td><td style="text-align:right"><button class="danger">削除</button></td>';
+    tr.innerHTML = `<td></td><td class="n"></td><td><span class="badge ${w.status}">${LABEL[w.status]}</span></td>`;
     tr.cells[0].textContent = w.word; tr.cells[1].textContent = w.count;
-    tr.querySelector('button').onclick = async () => {
-      if (!confirm(`「${w.word}」を削除しますか？`)) return;
-      try { await admin('delete', { key: w.key }); load(); } catch (e) { $('msg').textContent = e.message; }
-    };
-    tb.appendChild(tr);
+    tr.appendChild(actions(w)); tb.appendChild(tr);
   }
 }
 $('login').onclick = async () => {

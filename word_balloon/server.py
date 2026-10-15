@@ -4,7 +4,7 @@
 
   /         参加者の回答ページ（スマホ）
   /screen   会場スクリーン用の表示ページ
-  /admin    管理ページ（ワード削除・リセット。起動時に表示される管理キーが必要）
+  /admin    管理ページ（要確認ワードの許可・非表示、削除、リセット。起動時に表示される管理キーが必要）
 """
 import argparse
 import json
@@ -18,7 +18,7 @@ from pathlib import Path
 from urllib.parse import urlparse
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
-from word_balloon.store import WordStore  # noqa: E402
+from word_balloon.store import APPROVED, REJECTED, WordStore  # noqa: E402
 
 HERE = Path(__file__).resolve().parent
 STATIC = HERE / "static"
@@ -34,6 +34,15 @@ def lan_ip() -> str:
             return s.getsockname()[0]
     except OSError:
         return "127.0.0.1"
+
+
+def read_list(path) -> list[str]:
+    """1行1語のリスト（# で始まる行と空行は無視）。"""
+    p = Path(path)
+    if not p.exists():
+        return []
+    return [l.strip() for l in p.read_text(encoding="utf-8").splitlines()
+            if l.strip() and not l.lstrip().startswith("#")]
 
 
 def make_handler(store: WordStore, admin_key: str, answer_url: str):
@@ -89,6 +98,12 @@ def make_handler(store: WordStore, admin_key: str, answer_url: str):
                     return self._json({"ok": False, "error": "管理キーが違います"}, HTTPStatus.FORBIDDEN)
                 if path == "/api/admin/check":
                     return self._json({"ok": True})
+                if path == "/api/admin/words":
+                    return self._json({"ok": True, **store.snapshot(include_hidden=True)})
+                if path in ("/api/admin/approve", "/api/admin/reject"):
+                    key = data.get("key")
+                    status = APPROVED if path.endswith("approve") else REJECTED
+                    return self._json({"ok": store.set_status(key if isinstance(key, str) else "", status)})
                 if path == "/api/admin/delete":
                     key = data.get("key")
                     return self._json({"ok": store.delete(key if isinstance(key, str) else "")})
@@ -106,15 +121,14 @@ def main(argv=None):
     p.add_argument("--port", type=int, default=8000)
     p.add_argument("--data", default=str(HERE / "data" / "answers.json"), help="回答の保存先（再起動しても残る）")
     p.add_argument("--ng", default=str(HERE / "ng_words.txt"), help="受け付けないワード（1行1語、部分一致）")
+    p.add_argument("--review", default=str(HERE / "review_words.txt"),
+                   help="要確認ワード（1行1語、部分一致）。含む回答は管理者が許可するまでスクリーンに出さない")
+    p.add_argument("--review-all", action="store_true", help="すべての新しいワードを管理者の許可制にする")
     p.add_argument("--public-url", help="参加者に案内する URL（省略時は LAN の IP から作成）")
     a = p.parse_args(argv)
 
-    ng_path = Path(a.ng)
-    ng = []
-    if ng_path.exists():
-        ng = [l.strip() for l in ng_path.read_text(encoding="utf-8").splitlines()
-              if l.strip() and not l.lstrip().startswith("#")]
-    store = WordStore(Path(a.data), ng_words=ng)
+    store = WordStore(Path(a.data), ng_words=read_list(a.ng), review_words=read_list(a.review),
+                      review_all=a.review_all)
     admin_key = os.environ.get("WORD_BALLOON_ADMIN_KEY") or secrets.token_urlsafe(6)
     answer_url = a.public_url or f"http://{lan_ip()}:{a.port}/"
 
@@ -124,6 +138,8 @@ def main(argv=None):
     print(f"  回答ページ（参加者）: {answer_url}")
     print(f"  スクリーン表示     : {base}/screen")
     print(f"  管理ページ         : {base}/admin   管理キー: {admin_key}")
+    if a.review_all:
+        print("  ※ すべての新しいワードは管理ページで許可するまでスクリーンに表示されません")
     try:
         httpd.serve_forever()
     except KeyboardInterrupt:
