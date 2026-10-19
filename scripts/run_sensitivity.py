@@ -1,6 +1,6 @@
 """感度分析：最小台数と年間費用のトルネード図、推奨案が変わる境目。結果は data/output/study/ に保存。
 
-基準：需要＝低位と高位の中間、(i) 代替乗車なし、駅ポート容量25台、手続き60秒、自転車比率60.3%、歩行4.8km/h、
+基準：需要＝低位と高位の中間、代替乗車は config（fleet_mix.substitution）、駅ポート容量25台、手続き60秒、自転車比率60.3%、歩行4.8km/h、
       費用は config の値。目標＝貸出失敗率5%以下（平日・晴れの1日で探索）。
 推奨案：運用 a/b/c のうち、目標を満たす最小台数での年間総費用が最も小さいもの。
 使い方: python scripts/run_sensitivity.py [--procs 4] [--districts 既存街区 新規街区]
@@ -70,7 +70,7 @@ def run_point(args):
     oh2, rh2, _ = demand_hourly(sv, cfg, v["需要（転換率）"], P, "休日")
     cap = int(v["駅ポート容量"])
     L, _, _ = optimal_layout(net, cfg, sh, 3, v["自転車の比率"], walk_kmh=v["歩行速度（km/h）"], station_cap=cap)
-    kw = dict(pattern=pattern, substitution=False, ebike_share=v["自転車の比率"], procedure_sec=v["手続き時間（秒）"],
+    kw = dict(pattern=pattern, substitution=cfg["fleet_mix"]["substitution"], ebike_share=v["自転車の比率"], procedure_sec=v["手続き時間（秒）"],
               walk_kmh=v["歩行速度（km/h）"])
     ops = make_ops(cfg, **kw)
     r = min_fleet(L, ops, oh, rh, targets=(TARGET,), n_rep=n_rep, seed=0)[TARGET]

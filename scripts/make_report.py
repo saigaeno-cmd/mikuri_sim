@@ -384,7 +384,11 @@ def main():
     reps = int(d["回"].nunique())
     n_cond = d.groupby(["需要シナリオ", "代替乗車", "運用", "駅ポート容量"]).ngroups
 
-    def sel(scen=None, sub="なし(i)", pat="a", cap=base_cap, tgt=0.05):
+    # 基本の前提（config の fleet_mix.substitution）。(ii)＝他の車種があれば乗り、無ければ徒歩
+    SUB = "あり(ii)" if cfg["fleet_mix"]["substitution"] else "なし(i)"
+    SUBTXT = "代替乗車あり(ii)" if SUB.startswith("あり") else "代替乗車なし(i)"
+
+    def sel(scen=None, sub=SUB, pat="a", cap=base_cap, tgt=0.05):
         m = pd.Series(True, index=d.index)
         for col, v in (("需要シナリオ", scen), ("代替乗車", sub), ("運用", pat), ("駅ポート容量", cap), ("目標失敗率", tgt)):
             if v is not None:
@@ -395,7 +399,7 @@ def main():
     fix = d["月_返却失敗率"].fillna(0) > 0
     d.loc[fix, "月_駅ポート最大在庫"] = np.maximum(d.loc[fix, "月_駅ポート最大在庫"].fillna(0), d.loc[fix, "駅ポート容量"])
 
-    # ---- 推奨案（目標：失敗率5%・代替乗車なし。運用 a/b/c × 駅ポート容量のうち年間費用が最小、10回すべて達成）
+    # ---- 推奨案（目標：失敗率5%・基本の代替乗車。運用 a/b/c × 駅ポート容量のうち年間費用が最小、10回すべて達成）
     rec = {}
     for scen in scens:
         best = None
@@ -421,14 +425,15 @@ def main():
                          rows=x)
     lo_s, hi_s = scens[0], scens[1]
 
-    def med_fleet(scen, sub="なし(i)", pat="a", cap=base_cap, tgt=0.05):
+    def med_fleet(scen, sub=SUB, pat="a", cap=base_cap, tgt=0.05):
         x = sel(scen, sub, pat, cap, tgt)
         ok = x[x["達成"]]
         return float(ok["合計台数"].median()) if len(ok) and len(ok) >= len(x) / 2 else np.nan
 
     r15 = [med_fleet(sc, tgt=0.01) / med_fleet(sc) for sc in scens if not np.isnan(med_fleet(sc, tgt=0.01))]
     miss1 = [short_scen(sc) for sc in scens if np.isnan(med_fleet(sc, tgt=0.01))]
-    red = [1 - med_fleet(sc, "あり(ii)") / med_fleet(sc) for sc in scens if not np.isnan(med_fleet(sc))]
+    red = [1 - med_fleet(sc, "あり(ii)") / med_fleet(sc, "なし(i)") for sc in scens
+           if not np.isnan(med_fleet(sc, "なし(i)")) and not np.isnan(med_fleet(sc, "あり(ii)"))]
 
     # ---- 推奨案の配置・1か月（低位・高位）
     lay, month = {}, {}
@@ -441,10 +446,10 @@ def main():
         L, ports, assign = optimal_layout(net, cfg, sh, 3, cfg["fleet_mix"]["ebike_share"], station_cap=cap_s)
         lay[scen] = (L, ports, assign)
         if r:
-            ops = make_ops(cfg, pattern=r["pattern"], substitution=False)
+            ops = make_ops(cfg, pattern=r["pattern"], substitution=cfg["fleet_mix"]["substitution"])
             F = fleet_for(L, r["nb"], r["nk"], oh, rh, ops)
             summ, daily = month_eval(L, F, cfg, {"平日": (oh, rh), "休日": (oh2, rh2)}, pattern=r["pattern"],
-                                     substitution=False, seed=1)
+                                     substitution=cfg["fleet_mix"]["substitution"], seed=1)
             cost = annual_cost(cfg, F, L.k, daily, cap_s)
             r["init"] = F.init
             month[scen] = (summ, daily, cost)
@@ -483,7 +488,7 @@ def main():
     s = dup(prs, T[4])
     put(by_id(s, 32), "結論：推奨案")
     put(by_id(s, 33), "Recommendation")
-    put(by_id(s, 31), "失敗率5%以下を最も安く満たす構成")
+    put(by_id(s, 31), f"失敗率5%以下で最安の構成（代替{SUB[:2]}）")
     rl, rh_ = rec[lo_s], rec[hi_s]
     put(by_id(s, 40), "PORT")
     put(by_id(s, 41), "住宅側ポート3か所")
@@ -533,13 +538,13 @@ def main():
         d0 = load_results(prev_p.parent)
 
         def med0(df, scen, tgt, col="合計台数", pat="a", cap=base_cap):
-            x = df[(df["需要シナリオ"] == scen) & (df["代替乗車"] == "なし(i)") & (df["運用"] == pat)
+            x = df[(df["需要シナリオ"] == scen) & (df["代替乗車"] == SUB) & (df["運用"] == pat)
                    & (df["駅ポート容量"] == cap) & (df["目標失敗率"] == tgt)]
             ok = x[x["達成"]]
             return float(ok[col].median()) if len(ok) and len(ok) >= len(x) / 2 else np.nan
 
         s = frame("新規街区の追加による変化", "Effect of the New District",
-                  f"171戸→{n_h}戸（{dist_txt}）・代替なし・運用a・駅{base_cap}台")
+                  f"171戸→{n_h}戸（{dist_txt}）・{SUB}・運用a・駅{base_cap}台")
         cd = CategoryChartData()
         cd.categories = [short_scen(x) for x in scens]
         cd.add_series("171戸", [med0(d0, sc, 0.05) for sc in scens])
@@ -582,7 +587,7 @@ def main():
     # 4 検討の概要と条件
     s = frame("検討の概要と条件", "Overview & Conditions", f"全{n_cond}条件 × 各{reps}回（乱数を変えて）を計算")
     rows = [("需要シナリオ", "低位・高位（暫定）／旧シナリオ転換率10%・30%"),
-            ("代替乗車", "(i) 希望車種が無ければ使わない／(ii) 他車種で代替"),
+            ("代替乗車", "(i) 希望車種が無ければ徒歩／(ii) 他の車種があれば乗り、無ければ徒歩（基本は(ii)）"),
             ("リバランス", "a 夜1回／b a＋9:30 駅の余剰を戻す／c b＋15:30 住宅側と駅をそろえる"),
             ("駅ポート容量", "18台（区画①のみ）・25台（基本）・32台（区画②も2列）"),
             ("目標", "貸出失敗率 20%（充足率80%）・5%・1% それぞれの最小台数"),
@@ -597,7 +602,7 @@ def main():
 
     # 5 目標別の最小台数（表＋積み上げ棒）
     s = frame("目標ごとの最小台数", "Minimum Fleet by Target",
-              f"代替乗車なし(i)・運用a・駅ポート{base_cap}台（{reps}回の中央値、括弧は最小–最大）")
+              f"{SUBTXT}・運用a・駅ポート{base_cap}台（{reps}回の中央値、括弧は最小–最大）")
     tg = [0.20, 0.05, 0.01]
     rows = []
     for scen in scens:
@@ -616,7 +621,8 @@ def main():
         "表記：自転車＋キックボード＝合計（中央値）",
         f"失敗率1%は5%の約{min(r15):.1f}〜{max(r15):.1f}倍の台数が要る。"
         + (f"{'・'.join(miss1)}では1%を半数以上の回で達成できない（探索範囲内）。" if miss1 else ""),
-        f"代替乗車あり(ii)にすると、失敗率5%の台数は{min(red):.0%}〜{max(red):.0%}少なくなる（混在フリートのページ）。",
+        (f"代替乗車なし(i)と比べ、失敗率5%の台数は{min(red):.0%}〜{max(red):.0%}少ない（混在フリートのページ）。" if SUB.startswith("あり")
+         else f"代替乗車あり(ii)にすると、失敗率5%の台数は{min(red):.0%}〜{max(red):.0%}少なくなる（混在フリートのページ）。"),
         f"需要が多いほど駅ポート{base_cap}台が満車になりやすく、台数が急増する（駅ポート容量のページ）。"],
        size=14, space_after=8)
     cd = CategoryChartData()
@@ -709,7 +715,7 @@ def main():
     tb(s, 11.1, 6.7, 7.75, 3.4, [
         "車種の比率は調査Q16（自転車60.3%・キックボード39.7%）。利用者ごとに希望車種を割り当て、往復は同じ車種を希望。",
         f"代替を認めると、失敗率5%の台数を{min(red):.0%}〜{max(red):.0%}減らせる（需要が多いほど効果大）。代替乗車率は数%程度。",
-        "代替を前提にする場合は、利用規約・料金で他車種への乗り換えを案内する仕組みが要る。"], size=14, space_after=8)
+        "代替乗車を基本とする（他の車種があれば乗り、無ければ徒歩）。アプリ・利用規約で他車種への乗り換えを案内する仕組みが要る。"], size=14, space_after=8)
 
     # 9 駅ポート容量
     s = frame("駅ポートの容量（18・25・32台）", "Station Port Capacity", "満車で返却できない「返却失敗」と必要台数への影響")
@@ -728,7 +734,7 @@ def main():
     ch.plots[0].has_data_labels = True
     ch.plots[0].data_labels.position = XL_LABEL_POSITION.OUTSIDE_END
     ch.plots[0].data_labels.font.size = Pt(11)
-    chart_title(ch, "失敗率5%の最小台数（(i)・運用a、0＝未達）")
+    chart_title(ch, f"失敗率5%の最小台数（{SUB}・運用a、0＝未達）")
     zero_axis(ch)
     rows = []
     for scen in scens:
@@ -742,7 +748,7 @@ def main():
           col_w=[1.7, 2.3, 2.3, 2.35], size=12, row_h=0.6)
     hi32 = sel(hi_s, cap=max(caps))
     hi_rf = hi32[hi32["達成"]]["月_返却失敗率"].median() if len(hi32) else np.nan
-    cap_note = (f"低位なら{base_cap}台で足りる。高位では{max(caps)}台にすると台数・費用とも下がる"
+    cap_note = (f"低位なら{rec[lo_s]['cap'] if rec.get(lo_s) else base_cap}台で足りる。高位では{max(caps)}台にすると台数・費用とも下がる"
                 + (f"が、それでも返却失敗が{hi_rf:.0%}残る。区画の拡張か代替乗車(ii)の検討が必要。"
                    if hi_rf > 0.05 else "。"))
     cap_lines = []
@@ -816,7 +822,7 @@ def main():
             f"稼働率 {summ['稼働率(回/台/日)']:.2f}回/台/日"], size=13, space_after=4)
 
     # 12 費用
-    s = frame("年間費用と他事例との比較", "Annual Cost & Benchmarks", "推奨案（失敗率5%・代替乗車なし・運用a、駅ポートは費用が最小の容量）")
+    s = frame("年間費用と他事例との比較", "Annual Cost & Benchmarks", f"推奨案（失敗率5%・{SUBTXT}・運用a、駅ポートは費用が最小の容量）")
     items = ["車両（償却）", "車両維持", "ポート（償却）", "用地", "人件費（リバランス）", "軽トラック"]
     cd = CategoryChartData()
     cd.categories = [short_scen(sc) for sc in scens if rec.get(sc)]
@@ -997,7 +1003,7 @@ def main():
     put(by_id(s, 40), "STEP 02")
     put(by_id(s, 39), "設計の確定")
     by_id(s, 39).top += Inches(0.15)
-    put(by_id(s, 38), "住宅側3か所・運用a、駅ポートは需要で25か32台")
+    put(by_id(s, 38), f"住宅側3か所・運用a・駅ポート{rec[lo_s]['cap']}〜{rec[hi_s]['cap']}台")
     put(by_id(s, 41), f"住宅の追加（現在{n_h}戸）に合わせてポート数と台数を見直す。")
     put(by_id(s, 50), "STEP 03")
     put(by_id(s, 49), "実証で検証")
@@ -1027,7 +1033,7 @@ def main():
     put(by_id(s, 20), "推奨案と次の一歩")
     by_id(s, 18).width = Inches(12.8)
     put(by_id(s, 18), [
-        f"住宅側ポート3か所・運用a（夜1回の再配置）を推奨。失敗率5%で、低位需要は{fl(rl)}・駅ポート{rl['cap']}台、"
+        f"住宅側ポート3か所・運用a（夜1回の再配置）を推奨（{SUBTXT}：他の車種があれば乗り、無ければ徒歩）。失敗率5%で、低位需要は{fl(rl)}・駅ポート{rl['cap']}台、"
         f"高位需要は{fl(rh_)}・駅ポート{rh_['cap']}台。",
         "日中のリバランス（b・c）は台数・費用を増やすだけで効果が無い。駅ポートが満車になると返却失敗で台数が急増するため、"
         "需要が高位に近ければ区画②を2列（32台）にする。",

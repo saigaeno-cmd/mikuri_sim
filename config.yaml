@@ -154,7 +154,7 @@ demand_scenarios:
 #   自転車（シェアリング）27.7%＝電動アシスト自転車、電動キックボード（シェアリング）18.2% → 60.3% : 39.7%）
 fleet_mix:
   ebike_share: 0.603
-  substitution: false     # false=(i) 希望車種が無ければ利用しない／true=(ii) もう一方の車種に乗る
+  substitution: true      # true=(ii) 他の車種があれば乗り、何もなければ徒歩（2026-10 決定）／false=(i) 希望車種が無ければ徒歩
 
 procedure_sec: 60         # 貸出・返却の手続き時間（秒/回）。感度：30〜120秒
 
