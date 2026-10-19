@@ -1,0 +1,849 @@
+{
+ "type": "FeatureCollection",
+ "features": [
+  {
+   "type": "Feature",
+   "geometry": {
+    "type": "LineString",
+    "coordinates": [
+     [
+      139.70750138,
+      36.10981533
+     ],
+     [
+      139.70740809,
+      36.10973957
+     ],
+     [
+      139.70715443,
+      36.10953358
+     ]
+    ]
+   },
+   "properties": {
+    "id": "NR01",
+    "kind": "road",
+    "category": "区画道路(W=6.0m)",
+    "highway": "residential",
+    "width_m": 6.0,
+    "length_m": 44.2,
+    "note": ""
+   }
+  },
+  {
+   "type": "Feature",
+   "geometry": {
+    "type": "LineString",
+    "coordinates": [
+     [
+      139.70715443,
+      36.10953358
+     ],
+     [
+      139.7069096,
+      36.1097317
+     ],
+     [
+      139.70669027,
+      36.10990918
+     ],
+     [
+      139.70649997,
+      36.11006318
+     ],
+     [
+      139.70644916,
+      36.11010429
+     ],
+     [
+      139.7062807,
+      36.11024061
+     ],
+     [
+      139.7062212,
+      36.11028877
+     ]
+    ]
+   },
+   "properties": {
+    "id": "NR02",
+    "kind": "road",
+    "category": "区画道路(W=6.0m)",
+    "highway": "residential",
+    "width_m": 6.0,
+    "length_m": 118.7,
+    "note": ""
+   }
+  },
+  {
+   "type": "Feature",
+   "geometry": {
+    "type": "LineString",
+    "coordinates": [
+     [
+      139.70715443,
+      36.10953358
+     ],
+     [
+      139.70703813,
+      36.10943898
+     ],
+     [
+      139.70695639,
+      36.10937249
+     ]
+    ]
+   },
+   "properties": {
+    "id": "NR03",
+    "kind": "road",
+    "category": "区画道路(W=6.0m)",
+    "highway": "residential",
+    "width_m": 6.0,
+    "length_m": 25.2,
+    "note": ""
+   }
+  },
+  {
+   "type": "Feature",
+   "geometry": {
+    "type": "LineString",
+    "coordinates": [
+     [
+      139.70609642,
+      36.11038952
+     ],
+     [
+      139.7062212,
+      36.11028877
+     ]
+    ]
+   },
+   "properties": {
+    "id": "NR04",
+    "kind": "road",
+    "category": "区画道路(W=6.0m)",
+    "highway": "residential",
+    "width_m": 6.0,
+    "length_m": 15.8,
+    "note": ""
+   }
+  },
+  {
+   "type": "Feature",
+   "geometry": {
+    "type": "LineString",
+    "coordinates": [
+     [
+      139.70727259,
+      36.11002654
+     ],
+     [
+      139.70713804,
+      36.10991753
+     ]
+    ]
+   },
+   "properties": {
+    "id": "NR05",
+    "kind": "foot",
+    "category": "歩行者専用通路(W=2.0m)",
+    "highway": "footway",
+    "width_m": 2.0,
+    "length_m": 17.1,
+    "note": ""
+   }
+  },
+  {
+   "type": "Feature",
+   "geometry": {
+    "type": "LineString",
+    "coordinates": [
+     [
+      139.70683367,
+      36.11038129
+     ],
+     [
+      139.70669952,
+      36.11027261
+     ]
+    ]
+   },
+   "properties": {
+    "id": "NR06",
+    "kind": "foot",
+    "category": "歩行者専用通路(W=2.0m)",
+    "highway": "footway",
+    "width_m": 2.0,
+    "length_m": 17.1,
+    "note": ""
+   }
+  },
+  {
+   "type": "Feature",
+   "geometry": {
+    "type": "LineString",
+    "coordinates": [
+     [
+      139.70736089,
+      36.1097442
+     ],
+     [
+      139.70735091,
+      36.10974517
+     ],
+     [
+      139.70713804,
+      36.10991753
+     ]
+    ]
+   },
+   "properties": {
+    "id": "NR07",
+    "kind": "foot",
+    "category": "歩行者専用通路(W=2.0m)",
+    "highway": "footway",
+    "width_m": 2.0,
+    "length_m": 28.0,
+    "note": ""
+   }
+  },
+  {
+   "type": "Feature",
+   "geometry": {
+    "type": "LineString",
+    "coordinates": [
+     [
+      139.70623112,
+      36.1106604
+     ],
+     [
+      139.7062343,
+      36.11064939
+     ],
+     [
+      139.70647947,
+      36.1104495
+     ]
+    ]
+   },
+   "properties": {
+    "id": "NR08",
+    "kind": "foot",
+    "category": "歩行者専用通路(W=2.0m)",
+    "highway": "footway",
+    "width_m": 2.0,
+    "length_m": 32.5,
+    "note": ""
+   }
+  },
+  {
+   "type": "Feature",
+   "geometry": {
+    "type": "LineString",
+    "coordinates": [
+     [
+      139.70713804,
+      36.10991753
+     ],
+     [
+      139.70691798,
+      36.11009442
+     ]
+    ]
+   },
+   "properties": {
+    "id": "NR09",
+    "kind": "foot",
+    "category": "歩行者専用通路(W=2.0m)",
+    "highway": "footway",
+    "width_m": 2.0,
+    "length_m": 27.9,
+    "note": ""
+   }
+  },
+  {
+   "type": "Feature",
+   "geometry": {
+    "type": "LineString",
+    "coordinates": [
+     [
+      139.70713804,
+      36.10991753
+     ],
+     [
+      139.7069416,
+      36.10975773
+     ]
+    ]
+   },
+   "properties": {
+    "id": "NR10",
+    "kind": "foot",
+    "category": "歩行者専用通路(W=2.0m)",
+    "highway": "footway",
+    "width_m": 2.0,
+    "length_m": 25.0,
+    "note": ""
+   }
+  },
+  {
+   "type": "Feature",
+   "geometry": {
+    "type": "LineString",
+    "coordinates": [
+     [
+      139.70669952,
+      36.11027261
+     ],
+     [
+      139.70647947,
+      36.1104495
+     ]
+    ]
+   },
+   "properties": {
+    "id": "NR11",
+    "kind": "foot",
+    "category": "歩行者専用通路(W=2.0m)",
+    "highway": "footway",
+    "width_m": 2.0,
+    "length_m": 27.9,
+    "note": ""
+   }
+  },
+  {
+   "type": "Feature",
+   "geometry": {
+    "type": "LineString",
+    "coordinates": [
+     [
+      139.70669952,
+      36.11027261
+     ],
+     [
+      139.70691798,
+      36.11009442
+     ]
+    ]
+   },
+   "properties": {
+    "id": "NR12",
+    "kind": "foot",
+    "category": "歩行者専用通路(W=2.0m)",
+    "highway": "footway",
+    "width_m": 2.0,
+    "length_m": 27.9,
+    "note": ""
+   }
+  },
+  {
+   "type": "Feature",
+   "geometry": {
+    "type": "LineString",
+    "coordinates": [
+     [
+      139.70669952,
+      36.11027261
+     ],
+     [
+      139.70650269,
+      36.11011313
+     ],
+     [
+      139.70650228,
+      36.11010569
+     ]
+    ]
+   },
+   "properties": {
+    "id": "NR13",
+    "kind": "foot",
+    "category": "歩行者専用通路(W=2.0m)",
+    "highway": "footway",
+    "width_m": 2.0,
+    "length_m": 25.9,
+    "note": ""
+   }
+  },
+  {
+   "type": "Feature",
+   "geometry": {
+    "type": "LineString",
+    "coordinates": [
+     [
+      139.70691798,
+      36.11009442
+     ],
+     [
+      139.70672234,
+      36.10993527
+     ]
+    ]
+   },
+   "properties": {
+    "id": "NR14",
+    "kind": "foot",
+    "category": "歩行者専用通路(W=2.0m)",
+    "highway": "footway",
+    "width_m": 2.0,
+    "length_m": 24.9,
+    "note": ""
+   }
+  },
+  {
+   "type": "Feature",
+   "geometry": {
+    "type": "LineString",
+    "coordinates": [
+     [
+      139.70647947,
+      36.1104495
+     ],
+     [
+      139.70628343,
+      36.11029067
+     ],
+     [
+      139.70628303,
+      36.11028322
+     ]
+    ]
+   },
+   "properties": {
+    "id": "NR15",
+    "kind": "foot",
+    "category": "歩行者専用通路(W=2.0m)",
+    "highway": "footway",
+    "width_m": 2.0,
+    "length_m": 25.8,
+    "note": ""
+   }
+  },
+  {
+   "type": "Feature",
+   "geometry": {
+    "type": "LineString",
+    "coordinates": [
+     [
+      139.70641808,
+      36.11007887
+     ],
+     [
+      139.70633344,
+      36.11000964
+     ]
+    ]
+   },
+   "properties": {
+    "id": "NR16",
+    "kind": "foot",
+    "category": "歩行者専用通路(W=2.0m)",
+    "highway": "footway",
+    "width_m": 2.0,
+    "length_m": 10.8,
+    "note": ""
+   }
+  },
+  {
+   "type": "Feature",
+   "geometry": {
+    "type": "LineString",
+    "coordinates": [
+     [
+      139.70700635,
+      36.10946472
+     ],
+     [
+      139.70633344,
+      36.11000964
+     ]
+    ]
+   },
+   "properties": {
+    "id": "NR17",
+    "kind": "foot",
+    "category": "歩行者専用通路(W=2.0m)",
+    "highway": "footway",
+    "width_m": 2.0,
+    "length_m": 85.6,
+    "note": ""
+   }
+  },
+  {
+   "type": "Feature",
+   "geometry": {
+    "type": "LineString",
+    "coordinates": [
+     [
+      139.70633344,
+      36.11000964
+     ],
+     [
+      139.70623642,
+      36.10993169
+     ]
+    ]
+   },
+   "properties": {
+    "id": "NR18",
+    "kind": "foot",
+    "category": "歩行者専用通路(W=2.0m)",
+    "highway": "footway",
+    "width_m": 2.0,
+    "length_m": 12.3,
+    "note": ""
+   }
+  },
+  {
+   "type": "Feature",
+   "geometry": {
+    "type": "LineString",
+    "coordinates": [
+     [
+      139.70750138,
+      36.10981533
+     ],
+     [
+      139.70754834,
+      36.10985346
+     ]
+    ]
+   },
+   "properties": {
+    "id": "NR19",
+    "kind": "connector",
+    "category": "区画道路(W=6.0m)",
+    "highway": "residential",
+    "width_m": 6.0,
+    "length_m": 6.0,
+    "note": "connect to OSM way 122618574"
+   }
+  },
+  {
+   "type": "Feature",
+   "geometry": {
+    "type": "LineString",
+    "coordinates": [
+     [
+      139.70695639,
+      36.10937249
+     ],
+     [
+      139.70689816,
+      36.10932512
+     ]
+    ]
+   },
+   "properties": {
+    "id": "NR20",
+    "kind": "connector",
+    "category": "区画道路(W=6.0m)",
+    "highway": "residential",
+    "width_m": 6.0,
+    "length_m": 7.4,
+    "note": "connect to OSM way 122618675"
+   }
+  },
+  {
+   "type": "Feature",
+   "geometry": {
+    "type": "LineString",
+    "coordinates": [
+     [
+      139.70609642,
+      36.11038952
+     ],
+     [
+      139.70603185,
+      36.11044166
+     ]
+    ]
+   },
+   "properties": {
+    "id": "NR21",
+    "kind": "connector",
+    "category": "区画道路(W=6.0m)",
+    "highway": "residential",
+    "width_m": 6.0,
+    "length_m": 8.2,
+    "note": "connect to OSM way 1163807323"
+   }
+  },
+  {
+   "type": "Feature",
+   "geometry": {
+    "type": "LineString",
+    "coordinates": [
+     [
+      139.70727259,
+      36.11002654
+     ],
+     [
+      139.70730371,
+      36.11005176
+     ]
+    ]
+   },
+   "properties": {
+    "id": "NR22",
+    "kind": "connector",
+    "category": "歩行者専用通路(W=2.0m)",
+    "highway": "footway",
+    "width_m": 2.0,
+    "length_m": 4.0,
+    "note": "connect to OSM way 122618574"
+   }
+  },
+  {
+   "type": "Feature",
+   "geometry": {
+    "type": "LineString",
+    "coordinates": [
+     [
+      139.70683367,
+      36.11038129
+     ],
+     [
+      139.70686543,
+      36.11040702
+     ]
+    ]
+   },
+   "properties": {
+    "id": "NR23",
+    "kind": "connector",
+    "category": "歩行者専用通路(W=2.0m)",
+    "highway": "footway",
+    "width_m": 2.0,
+    "length_m": 4.0,
+    "note": "connect to OSM way 122618574"
+   }
+  },
+  {
+   "type": "Feature",
+   "geometry": {
+    "type": "LineString",
+    "coordinates": [
+     [
+      139.70736089,
+      36.1097442
+     ],
+     [
+      139.70740809,
+      36.10973957
+     ]
+    ]
+   },
+   "properties": {
+    "id": "NR24",
+    "kind": "connector",
+    "category": "歩行者専用通路(W=2.0m)",
+    "highway": "footway",
+    "width_m": 2.0,
+    "length_m": 4.3,
+    "note": "footpath->internal road"
+   }
+  },
+  {
+   "type": "Feature",
+   "geometry": {
+    "type": "LineString",
+    "coordinates": [
+     [
+      139.70623112,
+      36.1106604
+     ],
+     [
+      139.70621174,
+      36.11072746
+     ]
+    ]
+   },
+   "properties": {
+    "id": "NR25",
+    "kind": "connector",
+    "category": "歩行者専用通路(W=2.0m)",
+    "highway": "footway",
+    "width_m": 2.0,
+    "length_m": 7.6,
+    "note": "connect to OSM way 1163807323"
+   }
+  },
+  {
+   "type": "Feature",
+   "geometry": {
+    "type": "LineString",
+    "coordinates": [
+     [
+      139.7069416,
+      36.10975773
+     ],
+     [
+      139.7069096,
+      36.1097317
+     ]
+    ]
+   },
+   "properties": {
+    "id": "NR26",
+    "kind": "connector",
+    "category": "歩行者専用通路(W=2.0m)",
+    "highway": "footway",
+    "width_m": 2.0,
+    "length_m": 4.1,
+    "note": "footpath->internal road"
+   }
+  },
+  {
+   "type": "Feature",
+   "geometry": {
+    "type": "LineString",
+    "coordinates": [
+     [
+      139.70650228,
+      36.11010569
+     ],
+     [
+      139.70649997,
+      36.11006318
+     ]
+    ]
+   },
+   "properties": {
+    "id": "NR27",
+    "kind": "connector",
+    "category": "歩行者専用通路(W=2.0m)",
+    "highway": "footway",
+    "width_m": 2.0,
+    "length_m": 4.7,
+    "note": "footpath->internal road"
+   }
+  },
+  {
+   "type": "Feature",
+   "geometry": {
+    "type": "LineString",
+    "coordinates": [
+     [
+      139.70672234,
+      36.10993527
+     ],
+     [
+      139.70669027,
+      36.10990918
+     ]
+    ]
+   },
+   "properties": {
+    "id": "NR28",
+    "kind": "connector",
+    "category": "歩行者専用通路(W=2.0m)",
+    "highway": "footway",
+    "width_m": 2.0,
+    "length_m": 4.1,
+    "note": "footpath->internal road"
+   }
+  },
+  {
+   "type": "Feature",
+   "geometry": {
+    "type": "LineString",
+    "coordinates": [
+     [
+      139.70628303,
+      36.11028322
+     ],
+     [
+      139.7062807,
+      36.11024061
+     ]
+    ]
+   },
+   "properties": {
+    "id": "NR29",
+    "kind": "connector",
+    "category": "歩行者専用通路(W=2.0m)",
+    "highway": "footway",
+    "width_m": 2.0,
+    "length_m": 4.7,
+    "note": "footpath->internal road"
+   }
+  },
+  {
+   "type": "Feature",
+   "geometry": {
+    "type": "LineString",
+    "coordinates": [
+     [
+      139.70641808,
+      36.11007887
+     ],
+     [
+      139.70644916,
+      36.11010429
+     ]
+    ]
+   },
+   "properties": {
+    "id": "NR30",
+    "kind": "connector",
+    "category": "歩行者専用通路(W=2.0m)",
+    "highway": "footway",
+    "width_m": 2.0,
+    "length_m": 4.0,
+    "note": "footpath->internal road"
+   }
+  },
+  {
+   "type": "Feature",
+   "geometry": {
+    "type": "LineString",
+    "coordinates": [
+     [
+      139.70700635,
+      36.10946472
+     ],
+     [
+      139.70703813,
+      36.10943898
+     ]
+    ]
+   },
+   "properties": {
+    "id": "NR31",
+    "kind": "connector",
+    "category": "歩行者専用通路(W=2.0m)",
+    "highway": "footway",
+    "width_m": 2.0,
+    "length_m": 4.0,
+    "note": "footpath->internal road"
+   }
+  },
+  {
+   "type": "Feature",
+   "geometry": {
+    "type": "LineString",
+    "coordinates": [
+     [
+      139.70623642,
+      36.10993169
+     ],
+     [
+      139.70620077,
+      36.10990305
+     ]
+    ]
+   },
+   "properties": {
+    "id": "NR32",
+    "kind": "connector",
+    "category": "歩行者専用通路(W=2.0m)",
+    "highway": "footway",
+    "width_m": 2.0,
+    "length_m": 4.5,
+    "note": "connect to OSM way 122618675"
+   }
+  }
+ ]
+}

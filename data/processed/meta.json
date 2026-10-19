@@ -1,6 +1,6 @@
 {
   "source": "xml",
-  "created_at": "2026-10-15T01:44:24+00:00",
+  "created_at": "2026-10-19T05:03:03+00:00",
   "dest_keys": [
     "station",
     "aeon"
@@ -16,16 +16,16 @@
   "is_sample": false,
   "input_hash": "487cd35c71f79be2",
   "n_houses": 230,
-  "n_candidates": 67,
-  "walk_nodes": 781,
-  "bike_nodes": 533,
+  "n_candidates": 83,
+  "walk_nodes": 820,
+  "bike_nodes": 552,
   "bbox": [
     139.7016455524845,
     36.10573761357632,
     139.7173724475155,
     36.116801586423676
   ],
-  "osm_xml": "/home/user/data/raw/map.osm",
-  "osm_xml_hash": "704997bc2d65b327",
+  "osm_xml": "/home/user/data/raw/map_merged.osm",
+  "osm_xml_hash": "bc1d4950b27d29f2",
   "osmnx_version": "2.1.1"
 }

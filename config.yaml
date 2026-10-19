@@ -2,13 +2,13 @@
 # 座標の出典（2026-10 ご提供）：駅西口ポート・モビリティステーション・イオン入口1/2 は現地確認済みの座標。
 # 駅の改札（徒歩の最終目的地）は OSM の南栗橋駅ノード。座標を変えたら precompute を再実行。
 # 住宅：既存街区171戸＋新規街区59区画＝230戸（2026-10時点）。街区は paths.houses に追加して precompute を再実行する。
-# 新規街区の区画内道路は OSM に未収録のため、各区画は街区外周の道路まで直線距離で接続している（道路が載ったら map.osm を更新）。
+# 新規街区の区画道路・歩行者専用通路は計画図（251024_plan-土地 A1.pdf）をデジタイズしたもの（data/raw/new_roads_patch.osm）を map.osm に統合。
 
 paths:
   houses:                                # 住宅座標（街区ごと。GeoPackage / GeoJSON / CSV）。画面で対象街区を選べる
     - {name: 既存街区, file: data/raw/houses.gpkg}
     - {name: 新規街区, file: data/raw/houses_new_lots_59.geojson}
-  osm_xml: data/raw/map.osm              # 道路網（OSM XML）。あれば Overpass に接続せずこれを使う
+  osm_xml: data/raw/map_merged.osm       # 道路網（OSM XML）。map.osm＋新規街区の区画道路（scripts/merge_osm.py で作成）
   survey_csv: data/raw/survey.xlsx       # 時間帯別トリップ数アンケート（23件）。xlsx（2023集計表）/ CSV
   sample_dir: data/sample                # raw が無い場合に使うサンプル
   processed_dir: data/processed          # 事前計算結果（道路網・距離行列・ポート候補地点）

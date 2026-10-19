@@ -1,5 +1,7 @@
 <?xml version='1.0' encoding='utf-8'?>
-<graphml xmlns="http://graphml.graphdrawing.org/xmlns" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://graphml.graphdrawing.org/xmlns http://graphml.graphdrawing.org/xmlns/1.0/graphml.xsd"><key id="d15" for="edge" attr.name="service" attr.type="string"/>
+<graphml xmlns="http://graphml.graphdrawing.org/xmlns" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://graphml.graphdrawing.org/xmlns http://graphml.graphdrawing.org/xmlns/1.0/graphml.xsd"><key id="d17" for="edge" attr.name="width" attr.type="string"/>
+<key id="d16" for="edge" attr.name="name" attr.type="string"/>
+<key id="d15" for="edge" attr.name="service" attr.type="string"/>
 <key id="d14" for="edge" attr.name="access" attr.type="string"/>
 <key id="d13" for="edge" attr.name="bridge" attr.type="string"/>
 <key id="d12" for="edge" attr.name="footway" attr.type="string"/>
@@ -15,7 +17,7 @@
 <key id="d2" for="graph" attr.name="crs" attr.type="string"/>
 <key id="d1" for="graph" attr.name="created_with" attr.type="string"/>
 <key id="d0" for="graph" attr.name="created_date" attr.type="string"/>
-<graph edgedefault="directed"><data key="d0">2026-10-15 01:44:23</data>
+<graph edgedefault="directed"><data key="d0">2026-10-19 05:03:03</data>
 <data key="d1">OSMnx 2.1.1</data>
 <data key="d2">epsg:4326</data>
 <node id="522943288">
@@ -3216,6 +3218,162 @@
   <data key="d3">36.1122494</data>
   <data key="d4">139.7090183</data>
 </node>
+<node id="-1">
+  <data key="d3">36.11040702</data>
+  <data key="d4">139.70686543</data>
+</node>
+<node id="-2">
+  <data key="d3">36.11005176</data>
+  <data key="d4">139.70730371</data>
+</node>
+<node id="-3">
+  <data key="d3">36.10985346</data>
+  <data key="d4">139.70754834</data>
+</node>
+<node id="-4">
+  <data key="d3">36.10932512</data>
+  <data key="d4">139.70689816</data>
+</node>
+<node id="-5">
+  <data key="d3">36.10990305</data>
+  <data key="d4">139.70620077</data>
+</node>
+<node id="-6">
+  <data key="d3">36.11044166</data>
+  <data key="d4">139.70603185</data>
+</node>
+<node id="-7">
+  <data key="d3">36.11072746</data>
+  <data key="d4">139.70621174</data>
+</node>
+<node id="-8">
+  <data key="d3">36.10981533</data>
+  <data key="d4">139.70750138</data>
+</node>
+<node id="-9">
+  <data key="d3">36.10973957</data>
+  <data key="d4">139.70740809</data>
+</node>
+<node id="-10">
+  <data key="d3">36.10953358</data>
+  <data key="d4">139.70715443</data>
+</node>
+<node id="-11">
+  <data key="d3">36.1097317</data>
+  <data key="d4">139.7069096</data>
+</node>
+<node id="-12">
+  <data key="d3">36.10990918</data>
+  <data key="d4">139.70669027</data>
+</node>
+<node id="-13">
+  <data key="d3">36.11006318</data>
+  <data key="d4">139.70649997</data>
+</node>
+<node id="-14">
+  <data key="d3">36.11010429</data>
+  <data key="d4">139.70644916</data>
+</node>
+<node id="-15">
+  <data key="d3">36.11024061</data>
+  <data key="d4">139.7062807</data>
+</node>
+<node id="-16">
+  <data key="d3">36.11028877</data>
+  <data key="d4">139.7062212</data>
+</node>
+<node id="-17">
+  <data key="d3">36.10943898</data>
+  <data key="d4">139.70703813</data>
+</node>
+<node id="-18">
+  <data key="d3">36.10937249</data>
+  <data key="d4">139.70695639</data>
+</node>
+<node id="-19">
+  <data key="d3">36.11038952</data>
+  <data key="d4">139.70609642</data>
+</node>
+<node id="-20">
+  <data key="d3">36.11002654</data>
+  <data key="d4">139.70727259</data>
+</node>
+<node id="-21">
+  <data key="d3">36.10991753</data>
+  <data key="d4">139.70713804</data>
+</node>
+<node id="-22">
+  <data key="d3">36.11038129</data>
+  <data key="d4">139.70683367</data>
+</node>
+<node id="-23">
+  <data key="d3">36.11027261</data>
+  <data key="d4">139.70669952</data>
+</node>
+<node id="-24">
+  <data key="d3">36.1097442</data>
+  <data key="d4">139.70736089</data>
+</node>
+<node id="-25">
+  <data key="d3">36.10974517</data>
+  <data key="d4">139.70735091</data>
+</node>
+<node id="-26">
+  <data key="d3">36.1106604</data>
+  <data key="d4">139.70623112</data>
+</node>
+<node id="-27">
+  <data key="d3">36.11064939</data>
+  <data key="d4">139.7062343</data>
+</node>
+<node id="-28">
+  <data key="d3">36.1104495</data>
+  <data key="d4">139.70647947</data>
+</node>
+<node id="-29">
+  <data key="d3">36.11009442</data>
+  <data key="d4">139.70691798</data>
+</node>
+<node id="-30">
+  <data key="d3">36.10975773</data>
+  <data key="d4">139.7069416</data>
+</node>
+<node id="-31">
+  <data key="d3">36.11011313</data>
+  <data key="d4">139.70650269</data>
+</node>
+<node id="-32">
+  <data key="d3">36.11010569</data>
+  <data key="d4">139.70650228</data>
+</node>
+<node id="-33">
+  <data key="d3">36.10993527</data>
+  <data key="d4">139.70672234</data>
+</node>
+<node id="-34">
+  <data key="d3">36.11029067</data>
+  <data key="d4">139.70628343</data>
+</node>
+<node id="-35">
+  <data key="d3">36.11028322</data>
+  <data key="d4">139.70628303</data>
+</node>
+<node id="-36">
+  <data key="d3">36.11007887</data>
+  <data key="d4">139.70641808</data>
+</node>
+<node id="-37">
+  <data key="d3">36.11000964</data>
+  <data key="d4">139.70633344</data>
+</node>
+<node id="-38">
+  <data key="d3">36.10946472</data>
+  <data key="d4">139.70700635</data>
+</node>
+<node id="-39">
+  <data key="d3">36.10993169</data>
+  <data key="d4">139.70623642</data>
+</node>
 <edge source="522943288" target="13691232519" id="0">
   <data key="d7">133597222</data>
   <data key="d8">tertiary</data>
@@ -4024,12 +4182,12 @@
   <data key="d10">True</data>
   <data key="d11">16.502181419078962</data>
 </edge>
-<edge source="1369657711" target="10823726929" id="0">
+<edge source="1369657711" target="-7" id="0">
   <data key="d7">1163807323</data>
   <data key="d8">tertiary</data>
   <data key="d9">False</data>
   <data key="d10">False</data>
-  <data key="d11">76.41965664874297</data>
+  <data key="d11">15.885445730890153</data>
 </edge>
 <edge source="1369657714" target="1369657701" id="0">
   <data key="d7">122618428</data>
@@ -5073,12 +5231,12 @@
   <data key="d10">True</data>
   <data key="d11">10.154940425163012</data>
 </edge>
-<edge source="4445294713" target="10823726772" id="0">
+<edge source="4445294713" target="-3" id="0">
   <data key="d7">122618574</data>
   <data key="d8">unclassified</data>
   <data key="d9">False</data>
   <data key="d10">False</data>
-  <data key="d11">203.71151771410516</data>
+  <data key="d11">50.85913876173809</data>
 </edge>
 <edge source="4445294713" target="1369657649" id="0">
   <data key="d7">122618574</data>
@@ -6515,12 +6673,12 @@
   <data key="d10">False</data>
   <data key="d11">5.845103580108613</data>
 </edge>
-<edge source="10823726772" target="4445294713" id="0">
+<edge source="10823726772" target="-1" id="0">
   <data key="d7">122618574</data>
   <data key="d8">unclassified</data>
   <data key="d9">False</data>
   <data key="d10">True</data>
-  <data key="d11">203.71151771410516</data>
+  <data key="d11">65.94816359585255</data>
 </edge>
 <edge source="10823726773" target="13691868655" id="0">
   <data key="d7">1497573792</data>
@@ -6606,19 +6764,19 @@
   <data key="d10">False</data>
   <data key="d11">6.996957722039286</data>
 </edge>
-<edge source="10823726929" target="1369657711" id="0">
+<edge source="10823726929" target="-6" id="0">
   <data key="d7">1163807323</data>
   <data key="d8">tertiary</data>
   <data key="d9">False</data>
   <data key="d10">True</data>
-  <data key="d11">76.41965664874297</data>
+  <data key="d11">24.881944535553753</data>
 </edge>
-<edge source="10823726930" target="13691871229" id="0">
+<edge source="10823726930" target="-5" id="0">
   <data key="d7">122618675</data>
   <data key="d8">unclassified</data>
   <data key="d9">False</data>
   <data key="d10">False</data>
-  <data key="d11">166.48750469782595</data>
+  <data key="d11">40.13480847907436</data>
 </edge>
 <edge source="10823726930" target="5404913840" id="0">
   <data key="d7">122618675</data>
@@ -12266,12 +12424,12 @@
   <data key="d10">False</data>
   <data key="d11">10.154940425163012</data>
 </edge>
-<edge source="13691871229" target="10823726930" id="0">
+<edge source="13691871229" target="-4" id="0">
   <data key="d7">122618675</data>
   <data key="d8">unclassified</data>
   <data key="d9">False</data>
   <data key="d10">True</data>
-  <data key="d11">166.48750469782595</data>
+  <data key="d11">36.60512856073659</data>
 </edge>
 <edge source="13691871229" target="13691871228" id="0">
   <data key="d7">1494362201</data>
@@ -15944,5 +16102,877 @@
   <data key="d9">False</data>
   <data key="d10">True</data>
   <data key="d11">39.39226758614582</data>
+</edge>
+<edge source="-1" target="10823726772" id="0">
+  <data key="d7">122618574</data>
+  <data key="d8">unclassified</data>
+  <data key="d9">False</data>
+  <data key="d10">False</data>
+  <data key="d11">65.94816359585255</data>
+</edge>
+<edge source="-1" target="-2" id="0">
+  <data key="d7">122618574</data>
+  <data key="d8">unclassified</data>
+  <data key="d9">False</data>
+  <data key="d10">True</data>
+  <data key="d11">55.7731860631275</data>
+</edge>
+<edge source="-1" target="-22" id="0">
+  <data key="d7">-23</data>
+  <data key="d8">footway</data>
+  <data key="d16">歩行者専用通路(W=2.0m)</data>
+  <data key="d17">2.0</data>
+  <data key="d9">False</data>
+  <data key="d10">True</data>
+  <data key="d11">4.040506392234208</data>
+</edge>
+<edge source="-2" target="-1" id="0">
+  <data key="d7">122618574</data>
+  <data key="d8">unclassified</data>
+  <data key="d9">False</data>
+  <data key="d10">False</data>
+  <data key="d11">55.7731860631275</data>
+</edge>
+<edge source="-2" target="-3" id="0">
+  <data key="d7">122618574</data>
+  <data key="d8">unclassified</data>
+  <data key="d9">False</data>
+  <data key="d10">True</data>
+  <data key="d11">31.131029308030012</data>
+</edge>
+<edge source="-2" target="-20" id="0">
+  <data key="d7">-22</data>
+  <data key="d8">footway</data>
+  <data key="d16">歩行者専用通路(W=2.0m)</data>
+  <data key="d17">2.0</data>
+  <data key="d9">False</data>
+  <data key="d10">True</data>
+  <data key="d11">3.959762950523592</data>
+</edge>
+<edge source="-3" target="-2" id="0">
+  <data key="d7">122618574</data>
+  <data key="d8">unclassified</data>
+  <data key="d9">False</data>
+  <data key="d10">False</data>
+  <data key="d11">31.131029308030012</data>
+</edge>
+<edge source="-3" target="4445294713" id="0">
+  <data key="d7">122618574</data>
+  <data key="d8">unclassified</data>
+  <data key="d9">False</data>
+  <data key="d10">True</data>
+  <data key="d11">50.85913876173809</data>
+</edge>
+<edge source="-3" target="-8" id="0">
+  <data key="d7">-19</data>
+  <data key="d8">residential</data>
+  <data key="d16">区画道路(W=6.0m)</data>
+  <data key="d17">6.0</data>
+  <data key="d9">False</data>
+  <data key="d10">True</data>
+  <data key="d11">5.981038006139461</data>
+</edge>
+<edge source="-4" target="13691871229" id="0">
+  <data key="d7">122618675</data>
+  <data key="d8">unclassified</data>
+  <data key="d9">False</data>
+  <data key="d10">False</data>
+  <data key="d11">36.60512856073659</data>
+</edge>
+<edge source="-4" target="-5" id="0">
+  <data key="d7">122618675</data>
+  <data key="d8">unclassified</data>
+  <data key="d9">False</data>
+  <data key="d10">True</data>
+  <data key="d11">89.74756766017887</data>
+</edge>
+<edge source="-4" target="-18" id="0">
+  <data key="d7">-20</data>
+  <data key="d8">residential</data>
+  <data key="d16">区画道路(W=6.0m)</data>
+  <data key="d17">6.0</data>
+  <data key="d9">False</data>
+  <data key="d10">True</data>
+  <data key="d11">7.423487482003329</data>
+</edge>
+<edge source="-5" target="-4" id="0">
+  <data key="d7">122618675</data>
+  <data key="d8">unclassified</data>
+  <data key="d9">False</data>
+  <data key="d10">False</data>
+  <data key="d11">89.74756766017887</data>
+</edge>
+<edge source="-5" target="10823726930" id="0">
+  <data key="d7">122618675</data>
+  <data key="d8">unclassified</data>
+  <data key="d9">False</data>
+  <data key="d10">True</data>
+  <data key="d11">40.13480847907436</data>
+</edge>
+<edge source="-5" target="-39" id="0">
+  <data key="d7">-32</data>
+  <data key="d8">footway</data>
+  <data key="d16">歩行者専用通路(W=2.0m)</data>
+  <data key="d17">2.0</data>
+  <data key="d9">False</data>
+  <data key="d10">True</data>
+  <data key="d11">4.516435649695454</data>
+</edge>
+<edge source="-6" target="10823726929" id="0">
+  <data key="d7">1163807323</data>
+  <data key="d8">tertiary</data>
+  <data key="d9">False</data>
+  <data key="d10">False</data>
+  <data key="d11">24.881944535553753</data>
+</edge>
+<edge source="-6" target="-7" id="0">
+  <data key="d7">1163807323</data>
+  <data key="d8">tertiary</data>
+  <data key="d9">False</data>
+  <data key="d10">True</data>
+  <data key="d11">35.652266392328556</data>
+</edge>
+<edge source="-6" target="-19" id="0">
+  <data key="d7">-21</data>
+  <data key="d8">residential</data>
+  <data key="d16">区画道路(W=6.0m)</data>
+  <data key="d17">6.0</data>
+  <data key="d9">False</data>
+  <data key="d10">True</data>
+  <data key="d11">8.201167586407205</data>
+</edge>
+<edge source="-7" target="-6" id="0">
+  <data key="d7">1163807323</data>
+  <data key="d8">tertiary</data>
+  <data key="d9">False</data>
+  <data key="d10">False</data>
+  <data key="d11">35.652266392328556</data>
+</edge>
+<edge source="-7" target="1369657711" id="0">
+  <data key="d7">1163807323</data>
+  <data key="d8">tertiary</data>
+  <data key="d9">False</data>
+  <data key="d10">True</data>
+  <data key="d11">15.885445730890153</data>
+</edge>
+<edge source="-7" target="-26" id="0">
+  <data key="d7">-25</data>
+  <data key="d8">footway</data>
+  <data key="d16">歩行者専用通路(W=2.0m)</data>
+  <data key="d17">2.0</data>
+  <data key="d9">False</data>
+  <data key="d10">True</data>
+  <data key="d11">7.657278299519563</data>
+</edge>
+<edge source="-8" target="-9" id="0">
+  <data key="d7">-1</data>
+  <data key="d8">residential</data>
+  <data key="d16">区画道路(W=6.0m)</data>
+  <data key="d17">6.0</data>
+  <data key="d9">False</data>
+  <data key="d10">False</data>
+  <data key="d11">11.882750291375343</data>
+</edge>
+<edge source="-8" target="-3" id="0">
+  <data key="d7">-19</data>
+  <data key="d8">residential</data>
+  <data key="d16">区画道路(W=6.0m)</data>
+  <data key="d17">6.0</data>
+  <data key="d9">False</data>
+  <data key="d10">False</data>
+  <data key="d11">5.981038006139461</data>
+</edge>
+<edge source="-9" target="-10" id="0">
+  <data key="d7">-1</data>
+  <data key="d8">residential</data>
+  <data key="d16">区画道路(W=6.0m)</data>
+  <data key="d17">6.0</data>
+  <data key="d9">False</data>
+  <data key="d10">False</data>
+  <data key="d11">32.309397823412354</data>
+</edge>
+<edge source="-9" target="-8" id="0">
+  <data key="d7">-1</data>
+  <data key="d8">residential</data>
+  <data key="d16">区画道路(W=6.0m)</data>
+  <data key="d17">6.0</data>
+  <data key="d9">False</data>
+  <data key="d10">True</data>
+  <data key="d11">11.882750291375343</data>
+</edge>
+<edge source="-9" target="-24" id="0">
+  <data key="d7">-24</data>
+  <data key="d8">footway</data>
+  <data key="d16">歩行者専用通路(W=2.0m)</data>
+  <data key="d17">2.0</data>
+  <data key="d9">False</data>
+  <data key="d10">True</data>
+  <data key="d11">4.2712756193788035</data>
+</edge>
+<edge source="-10" target="-9" id="0">
+  <data key="d7">-1</data>
+  <data key="d8">residential</data>
+  <data key="d16">区画道路(W=6.0m)</data>
+  <data key="d17">6.0</data>
+  <data key="d9">False</data>
+  <data key="d10">True</data>
+  <data key="d11">32.309397823412354</data>
+</edge>
+<edge source="-10" target="-11" id="0">
+  <data key="d7">-2</data>
+  <data key="d8">residential</data>
+  <data key="d16">区画道路(W=6.0m)</data>
+  <data key="d17">6.0</data>
+  <data key="d9">False</data>
+  <data key="d10">False</data>
+  <data key="d11">31.129610487957045</data>
+</edge>
+<edge source="-10" target="-17" id="0">
+  <data key="d7">-3</data>
+  <data key="d8">residential</data>
+  <data key="d16">区画道路(W=6.0m)</data>
+  <data key="d17">6.0</data>
+  <data key="d9">False</data>
+  <data key="d10">False</data>
+  <data key="d11">14.825788021463815</data>
+</edge>
+<edge source="-11" target="-12" id="0">
+  <data key="d7">-2</data>
+  <data key="d8">residential</data>
+  <data key="d16">区画道路(W=6.0m)</data>
+  <data key="d17">6.0</data>
+  <data key="d9">False</data>
+  <data key="d10">False</data>
+  <data key="d11">27.886911061537255</data>
+</edge>
+<edge source="-11" target="-10" id="0">
+  <data key="d7">-2</data>
+  <data key="d8">residential</data>
+  <data key="d16">区画道路(W=6.0m)</data>
+  <data key="d17">6.0</data>
+  <data key="d9">False</data>
+  <data key="d10">True</data>
+  <data key="d11">31.129610487957045</data>
+</edge>
+<edge source="-11" target="-30" id="0">
+  <data key="d7">-26</data>
+  <data key="d8">footway</data>
+  <data key="d16">歩行者専用通路(W=2.0m)</data>
+  <data key="d17">2.0</data>
+  <data key="d9">False</data>
+  <data key="d10">True</data>
+  <data key="d11">4.079376295748685</data>
+</edge>
+<edge source="-12" target="-13" id="0">
+  <data key="d7">-2</data>
+  <data key="d8">residential</data>
+  <data key="d16">区画道路(W=6.0m)</data>
+  <data key="d17">6.0</data>
+  <data key="d9">False</data>
+  <data key="d10">False</data>
+  <data key="d11">24.196692452506813</data>
+</edge>
+<edge source="-12" target="-11" id="0">
+  <data key="d7">-2</data>
+  <data key="d8">residential</data>
+  <data key="d16">区画道路(W=6.0m)</data>
+  <data key="d17">6.0</data>
+  <data key="d9">False</data>
+  <data key="d10">True</data>
+  <data key="d11">27.886911061537255</data>
+</edge>
+<edge source="-12" target="-33" id="0">
+  <data key="d7">-28</data>
+  <data key="d8">footway</data>
+  <data key="d16">歩行者専用通路(W=2.0m)</data>
+  <data key="d17">2.0</data>
+  <data key="d9">False</data>
+  <data key="d10">True</data>
+  <data key="d11">4.088536721433538</data>
+</edge>
+<edge source="-13" target="-14" id="0">
+  <data key="d7">-2</data>
+  <data key="d8">residential</data>
+  <data key="d16">区画道路(W=6.0m)</data>
+  <data key="d17">6.0</data>
+  <data key="d9">False</data>
+  <data key="d10">False</data>
+  <data key="d11">6.459877018825686</data>
+</edge>
+<edge source="-13" target="-12" id="0">
+  <data key="d7">-2</data>
+  <data key="d8">residential</data>
+  <data key="d16">区画道路(W=6.0m)</data>
+  <data key="d17">6.0</data>
+  <data key="d9">False</data>
+  <data key="d10">True</data>
+  <data key="d11">24.196692452506813</data>
+</edge>
+<edge source="-13" target="-32" id="0">
+  <data key="d7">-27</data>
+  <data key="d8">footway</data>
+  <data key="d16">歩行者専用通路(W=2.0m)</data>
+  <data key="d17">2.0</data>
+  <data key="d9">False</data>
+  <data key="d10">True</data>
+  <data key="d11">4.731455820541438</data>
+</edge>
+<edge source="-14" target="-15" id="0">
+  <data key="d7">-2</data>
+  <data key="d8">residential</data>
+  <data key="d16">区画道路(W=6.0m)</data>
+  <data key="d17">6.0</data>
+  <data key="d9">False</data>
+  <data key="d10">False</data>
+  <data key="d11">21.41923258768816</data>
+</edge>
+<edge source="-14" target="-13" id="0">
+  <data key="d7">-2</data>
+  <data key="d8">residential</data>
+  <data key="d16">区画道路(W=6.0m)</data>
+  <data key="d17">6.0</data>
+  <data key="d9">False</data>
+  <data key="d10">True</data>
+  <data key="d11">6.459877018825686</data>
+</edge>
+<edge source="-14" target="-36" id="0">
+  <data key="d7">-30</data>
+  <data key="d8">footway</data>
+  <data key="d16">歩行者専用通路(W=2.0m)</data>
+  <data key="d17">2.0</data>
+  <data key="d9">False</data>
+  <data key="d10">True</data>
+  <data key="d11">3.9730165166919544</data>
+</edge>
+<edge source="-15" target="-16" id="0">
+  <data key="d7">-2</data>
+  <data key="d8">residential</data>
+  <data key="d16">区画道路(W=6.0m)</data>
+  <data key="d17">6.0</data>
+  <data key="d9">False</data>
+  <data key="d10">False</data>
+  <data key="d11">7.566190673120165</data>
+</edge>
+<edge source="-15" target="-14" id="0">
+  <data key="d7">-2</data>
+  <data key="d8">residential</data>
+  <data key="d16">区画道路(W=6.0m)</data>
+  <data key="d17">6.0</data>
+  <data key="d9">False</data>
+  <data key="d10">True</data>
+  <data key="d11">21.41923258768816</data>
+</edge>
+<edge source="-15" target="-35" id="0">
+  <data key="d7">-29</data>
+  <data key="d8">footway</data>
+  <data key="d16">歩行者専用通路(W=2.0m)</data>
+  <data key="d17">2.0</data>
+  <data key="d9">False</data>
+  <data key="d10">True</data>
+  <data key="d11">4.742643587592477</data>
+</edge>
+<edge source="-16" target="-15" id="0">
+  <data key="d7">-2</data>
+  <data key="d8">residential</data>
+  <data key="d16">区画道路(W=6.0m)</data>
+  <data key="d17">6.0</data>
+  <data key="d9">False</data>
+  <data key="d10">True</data>
+  <data key="d11">7.566190673120165</data>
+</edge>
+<edge source="-16" target="-19" id="0">
+  <data key="d7">-4</data>
+  <data key="d8">residential</data>
+  <data key="d16">区画道路(W=6.0m)</data>
+  <data key="d17">6.0</data>
+  <data key="d9">False</data>
+  <data key="d10">True</data>
+  <data key="d11">15.84783788637971</data>
+</edge>
+<edge source="-17" target="-18" id="0">
+  <data key="d7">-3</data>
+  <data key="d8">residential</data>
+  <data key="d16">区画道路(W=6.0m)</data>
+  <data key="d17">6.0</data>
+  <data key="d9">False</data>
+  <data key="d10">False</data>
+  <data key="d11">10.420249079812706</data>
+</edge>
+<edge source="-17" target="-10" id="0">
+  <data key="d7">-3</data>
+  <data key="d8">residential</data>
+  <data key="d16">区画道路(W=6.0m)</data>
+  <data key="d17">6.0</data>
+  <data key="d9">False</data>
+  <data key="d10">True</data>
+  <data key="d11">14.825788021463815</data>
+</edge>
+<edge source="-17" target="-38" id="0">
+  <data key="d7">-31</data>
+  <data key="d8">footway</data>
+  <data key="d16">歩行者専用通路(W=2.0m)</data>
+  <data key="d17">2.0</data>
+  <data key="d9">False</data>
+  <data key="d10">True</data>
+  <data key="d11">4.042586626915151</data>
+</edge>
+<edge source="-18" target="-17" id="0">
+  <data key="d7">-3</data>
+  <data key="d8">residential</data>
+  <data key="d16">区画道路(W=6.0m)</data>
+  <data key="d17">6.0</data>
+  <data key="d9">False</data>
+  <data key="d10">True</data>
+  <data key="d11">10.420249079812706</data>
+</edge>
+<edge source="-18" target="-4" id="0">
+  <data key="d7">-20</data>
+  <data key="d8">residential</data>
+  <data key="d16">区画道路(W=6.0m)</data>
+  <data key="d17">6.0</data>
+  <data key="d9">False</data>
+  <data key="d10">False</data>
+  <data key="d11">7.423487482003329</data>
+</edge>
+<edge source="-19" target="-16" id="0">
+  <data key="d7">-4</data>
+  <data key="d8">residential</data>
+  <data key="d16">区画道路(W=6.0m)</data>
+  <data key="d17">6.0</data>
+  <data key="d9">False</data>
+  <data key="d10">False</data>
+  <data key="d11">15.84783788637971</data>
+</edge>
+<edge source="-19" target="-6" id="0">
+  <data key="d7">-21</data>
+  <data key="d8">residential</data>
+  <data key="d16">区画道路(W=6.0m)</data>
+  <data key="d17">6.0</data>
+  <data key="d9">False</data>
+  <data key="d10">False</data>
+  <data key="d11">8.201167586407205</data>
+</edge>
+<edge source="-20" target="-21" id="0">
+  <data key="d7">-5</data>
+  <data key="d8">footway</data>
+  <data key="d16">歩行者専用通路(W=2.0m)</data>
+  <data key="d17">2.0</data>
+  <data key="d9">False</data>
+  <data key="d10">False</data>
+  <data key="d11">17.117954815344053</data>
+</edge>
+<edge source="-20" target="-2" id="0">
+  <data key="d7">-22</data>
+  <data key="d8">footway</data>
+  <data key="d16">歩行者専用通路(W=2.0m)</data>
+  <data key="d17">2.0</data>
+  <data key="d9">False</data>
+  <data key="d10">False</data>
+  <data key="d11">3.959762950523592</data>
+</edge>
+<edge source="-21" target="-20" id="0">
+  <data key="d7">-5</data>
+  <data key="d8">footway</data>
+  <data key="d16">歩行者専用通路(W=2.0m)</data>
+  <data key="d17">2.0</data>
+  <data key="d9">False</data>
+  <data key="d10">True</data>
+  <data key="d11">17.117954815344053</data>
+</edge>
+<edge source="-21" target="-25" id="0">
+  <data key="d7">-7</data>
+  <data key="d8">footway</data>
+  <data key="d16">歩行者専用通路(W=2.0m)</data>
+  <data key="d17">2.0</data>
+  <data key="d9">False</data>
+  <data key="d10">True</data>
+  <data key="d11">27.073997543904643</data>
+</edge>
+<edge source="-21" target="-29" id="0">
+  <data key="d7">-9</data>
+  <data key="d8">footway</data>
+  <data key="d16">歩行者専用通路(W=2.0m)</data>
+  <data key="d17">2.0</data>
+  <data key="d9">False</data>
+  <data key="d10">False</data>
+  <data key="d11">27.886938545730562</data>
+</edge>
+<edge source="-21" target="-30" id="0">
+  <data key="d7">-10</data>
+  <data key="d8">footway</data>
+  <data key="d16">歩行者専用通路(W=2.0m)</data>
+  <data key="d17">2.0</data>
+  <data key="d9">False</data>
+  <data key="d10">False</data>
+  <data key="d11">25.042914322686322</data>
+</edge>
+<edge source="-22" target="-23" id="0">
+  <data key="d7">-6</data>
+  <data key="d8">footway</data>
+  <data key="d16">歩行者専用通路(W=2.0m)</data>
+  <data key="d17">2.0</data>
+  <data key="d9">False</data>
+  <data key="d10">False</data>
+  <data key="d11">17.066560177405364</data>
+</edge>
+<edge source="-22" target="-1" id="0">
+  <data key="d7">-23</data>
+  <data key="d8">footway</data>
+  <data key="d16">歩行者専用通路(W=2.0m)</data>
+  <data key="d17">2.0</data>
+  <data key="d9">False</data>
+  <data key="d10">False</data>
+  <data key="d11">4.040506392234208</data>
+</edge>
+<edge source="-23" target="-22" id="0">
+  <data key="d7">-6</data>
+  <data key="d8">footway</data>
+  <data key="d16">歩行者専用通路(W=2.0m)</data>
+  <data key="d17">2.0</data>
+  <data key="d9">False</data>
+  <data key="d10">True</data>
+  <data key="d11">17.066560177405364</data>
+</edge>
+<edge source="-23" target="-28" id="0">
+  <data key="d7">-11</data>
+  <data key="d8">footway</data>
+  <data key="d16">歩行者専用通路(W=2.0m)</data>
+  <data key="d17">2.0</data>
+  <data key="d9">False</data>
+  <data key="d10">False</data>
+  <data key="d11">27.886238388158386</data>
+</edge>
+<edge source="-23" target="-29" id="0">
+  <data key="d7">-12</data>
+  <data key="d8">footway</data>
+  <data key="d16">歩行者専用通路(W=2.0m)</data>
+  <data key="d17">2.0</data>
+  <data key="d9">False</data>
+  <data key="d10">False</data>
+  <data key="d11">27.887719106041335</data>
+</edge>
+<edge source="-23" target="-31" id="0">
+  <data key="d7">-13</data>
+  <data key="d8">footway</data>
+  <data key="d16">歩行者専用通路(W=2.0m)</data>
+  <data key="d17">2.0</data>
+  <data key="d9">False</data>
+  <data key="d10">False</data>
+  <data key="d11">25.04234833052832</data>
+</edge>
+<edge source="-24" target="-25" id="0">
+  <data key="d7">-7</data>
+  <data key="d8">footway</data>
+  <data key="d16">歩行者専用通路(W=2.0m)</data>
+  <data key="d17">2.0</data>
+  <data key="d9">False</data>
+  <data key="d10">False</data>
+  <data key="d11">0.9030016940390778</data>
+</edge>
+<edge source="-24" target="-9" id="0">
+  <data key="d7">-24</data>
+  <data key="d8">footway</data>
+  <data key="d16">歩行者専用通路(W=2.0m)</data>
+  <data key="d17">2.0</data>
+  <data key="d9">False</data>
+  <data key="d10">False</data>
+  <data key="d11">4.2712756193788035</data>
+</edge>
+<edge source="-25" target="-21" id="0">
+  <data key="d7">-7</data>
+  <data key="d8">footway</data>
+  <data key="d16">歩行者専用通路(W=2.0m)</data>
+  <data key="d17">2.0</data>
+  <data key="d9">False</data>
+  <data key="d10">False</data>
+  <data key="d11">27.073997543904643</data>
+</edge>
+<edge source="-25" target="-24" id="0">
+  <data key="d7">-7</data>
+  <data key="d8">footway</data>
+  <data key="d16">歩行者専用通路(W=2.0m)</data>
+  <data key="d17">2.0</data>
+  <data key="d9">False</data>
+  <data key="d10">True</data>
+  <data key="d11">0.9030016940390778</data>
+</edge>
+<edge source="-26" target="-27" id="0">
+  <data key="d7">-8</data>
+  <data key="d8">footway</data>
+  <data key="d16">歩行者専用通路(W=2.0m)</data>
+  <data key="d17">2.0</data>
+  <data key="d9">False</data>
+  <data key="d10">False</data>
+  <data key="d11">1.2571447172099388</data>
+</edge>
+<edge source="-26" target="-7" id="0">
+  <data key="d7">-25</data>
+  <data key="d8">footway</data>
+  <data key="d16">歩行者専用通路(W=2.0m)</data>
+  <data key="d17">2.0</data>
+  <data key="d9">False</data>
+  <data key="d10">False</data>
+  <data key="d11">7.657278299519563</data>
+</edge>
+<edge source="-27" target="-28" id="0">
+  <data key="d7">-8</data>
+  <data key="d8">footway</data>
+  <data key="d16">歩行者専用通路(W=2.0m)</data>
+  <data key="d17">2.0</data>
+  <data key="d9">False</data>
+  <data key="d10">False</data>
+  <data key="d11">31.290512981995843</data>
+</edge>
+<edge source="-27" target="-26" id="0">
+  <data key="d7">-8</data>
+  <data key="d8">footway</data>
+  <data key="d16">歩行者専用通路(W=2.0m)</data>
+  <data key="d17">2.0</data>
+  <data key="d9">False</data>
+  <data key="d10">True</data>
+  <data key="d11">1.2571447172099388</data>
+</edge>
+<edge source="-28" target="-27" id="0">
+  <data key="d7">-8</data>
+  <data key="d8">footway</data>
+  <data key="d16">歩行者専用通路(W=2.0m)</data>
+  <data key="d17">2.0</data>
+  <data key="d9">False</data>
+  <data key="d10">True</data>
+  <data key="d11">31.290512981995843</data>
+</edge>
+<edge source="-28" target="-23" id="0">
+  <data key="d7">-11</data>
+  <data key="d8">footway</data>
+  <data key="d16">歩行者専用通路(W=2.0m)</data>
+  <data key="d17">2.0</data>
+  <data key="d9">False</data>
+  <data key="d10">True</data>
+  <data key="d11">27.886238388158386</data>
+</edge>
+<edge source="-28" target="-34" id="0">
+  <data key="d7">-15</data>
+  <data key="d8">footway</data>
+  <data key="d16">歩行者専用通路(W=2.0m)</data>
+  <data key="d17">2.0</data>
+  <data key="d9">False</data>
+  <data key="d10">False</data>
+  <data key="d11">24.941029710178455</data>
+</edge>
+<edge source="-29" target="-21" id="0">
+  <data key="d7">-9</data>
+  <data key="d8">footway</data>
+  <data key="d16">歩行者専用通路(W=2.0m)</data>
+  <data key="d17">2.0</data>
+  <data key="d9">False</data>
+  <data key="d10">True</data>
+  <data key="d11">27.886938545730562</data>
+</edge>
+<edge source="-29" target="-23" id="0">
+  <data key="d7">-12</data>
+  <data key="d8">footway</data>
+  <data key="d16">歩行者専用通路(W=2.0m)</data>
+  <data key="d17">2.0</data>
+  <data key="d9">False</data>
+  <data key="d10">True</data>
+  <data key="d11">27.887719106041335</data>
+</edge>
+<edge source="-29" target="-33" id="0">
+  <data key="d7">-14</data>
+  <data key="d8">footway</data>
+  <data key="d16">歩行者専用通路(W=2.0m)</data>
+  <data key="d17">2.0</data>
+  <data key="d9">False</data>
+  <data key="d10">False</data>
+  <data key="d11">24.94096120550493</data>
+</edge>
+<edge source="-30" target="-21" id="0">
+  <data key="d7">-10</data>
+  <data key="d8">footway</data>
+  <data key="d16">歩行者専用通路(W=2.0m)</data>
+  <data key="d17">2.0</data>
+  <data key="d9">False</data>
+  <data key="d10">True</data>
+  <data key="d11">25.042914322686322</data>
+</edge>
+<edge source="-30" target="-11" id="0">
+  <data key="d7">-26</data>
+  <data key="d8">footway</data>
+  <data key="d16">歩行者専用通路(W=2.0m)</data>
+  <data key="d17">2.0</data>
+  <data key="d9">False</data>
+  <data key="d10">False</data>
+  <data key="d11">4.079376295748685</data>
+</edge>
+<edge source="-31" target="-32" id="0">
+  <data key="d7">-13</data>
+  <data key="d8">footway</data>
+  <data key="d16">歩行者専用通路(W=2.0m)</data>
+  <data key="d17">2.0</data>
+  <data key="d9">False</data>
+  <data key="d10">False</data>
+  <data key="d11">0.8281108978334982</data>
+</edge>
+<edge source="-31" target="-23" id="0">
+  <data key="d7">-13</data>
+  <data key="d8">footway</data>
+  <data key="d16">歩行者専用通路(W=2.0m)</data>
+  <data key="d17">2.0</data>
+  <data key="d9">False</data>
+  <data key="d10">True</data>
+  <data key="d11">25.04234833052832</data>
+</edge>
+<edge source="-32" target="-31" id="0">
+  <data key="d7">-13</data>
+  <data key="d8">footway</data>
+  <data key="d16">歩行者専用通路(W=2.0m)</data>
+  <data key="d17">2.0</data>
+  <data key="d9">False</data>
+  <data key="d10">True</data>
+  <data key="d11">0.8281108978334982</data>
+</edge>
+<edge source="-32" target="-13" id="0">
+  <data key="d7">-27</data>
+  <data key="d8">footway</data>
+  <data key="d16">歩行者専用通路(W=2.0m)</data>
+  <data key="d17">2.0</data>
+  <data key="d9">False</data>
+  <data key="d10">False</data>
+  <data key="d11">4.731455820541438</data>
+</edge>
+<edge source="-33" target="-29" id="0">
+  <data key="d7">-14</data>
+  <data key="d8">footway</data>
+  <data key="d16">歩行者専用通路(W=2.0m)</data>
+  <data key="d17">2.0</data>
+  <data key="d9">False</data>
+  <data key="d10">True</data>
+  <data key="d11">24.94096120550493</data>
+</edge>
+<edge source="-33" target="-12" id="0">
+  <data key="d7">-28</data>
+  <data key="d8">footway</data>
+  <data key="d16">歩行者専用通路(W=2.0m)</data>
+  <data key="d17">2.0</data>
+  <data key="d9">False</data>
+  <data key="d10">False</data>
+  <data key="d11">4.088536721433538</data>
+</edge>
+<edge source="-34" target="-35" id="0">
+  <data key="d7">-15</data>
+  <data key="d8">footway</data>
+  <data key="d16">歩行者専用通路(W=2.0m)</data>
+  <data key="d17">2.0</data>
+  <data key="d9">False</data>
+  <data key="d10">False</data>
+  <data key="d11">0.8291823295984437</data>
+</edge>
+<edge source="-34" target="-28" id="0">
+  <data key="d7">-15</data>
+  <data key="d8">footway</data>
+  <data key="d16">歩行者専用通路(W=2.0m)</data>
+  <data key="d17">2.0</data>
+  <data key="d9">False</data>
+  <data key="d10">True</data>
+  <data key="d11">24.941029710178455</data>
+</edge>
+<edge source="-35" target="-34" id="0">
+  <data key="d7">-15</data>
+  <data key="d8">footway</data>
+  <data key="d16">歩行者専用通路(W=2.0m)</data>
+  <data key="d17">2.0</data>
+  <data key="d9">False</data>
+  <data key="d10">True</data>
+  <data key="d11">0.8291823295984437</data>
+</edge>
+<edge source="-35" target="-15" id="0">
+  <data key="d7">-29</data>
+  <data key="d8">footway</data>
+  <data key="d16">歩行者専用通路(W=2.0m)</data>
+  <data key="d17">2.0</data>
+  <data key="d9">False</data>
+  <data key="d10">False</data>
+  <data key="d11">4.742643587592477</data>
+</edge>
+<edge source="-36" target="-37" id="0">
+  <data key="d7">-16</data>
+  <data key="d8">footway</data>
+  <data key="d16">歩行者専用通路(W=2.0m)</data>
+  <data key="d17">2.0</data>
+  <data key="d9">False</data>
+  <data key="d10">False</data>
+  <data key="d11">10.820002561308431</data>
+</edge>
+<edge source="-36" target="-14" id="0">
+  <data key="d7">-30</data>
+  <data key="d8">footway</data>
+  <data key="d16">歩行者専用通路(W=2.0m)</data>
+  <data key="d17">2.0</data>
+  <data key="d9">False</data>
+  <data key="d10">False</data>
+  <data key="d11">3.9730165166919544</data>
+</edge>
+<edge source="-37" target="-36" id="0">
+  <data key="d7">-16</data>
+  <data key="d8">footway</data>
+  <data key="d16">歩行者専用通路(W=2.0m)</data>
+  <data key="d17">2.0</data>
+  <data key="d9">False</data>
+  <data key="d10">True</data>
+  <data key="d11">10.820002561308431</data>
+</edge>
+<edge source="-37" target="-38" id="0">
+  <data key="d7">-17</data>
+  <data key="d8">footway</data>
+  <data key="d16">歩行者専用通路(W=2.0m)</data>
+  <data key="d17">2.0</data>
+  <data key="d9">False</data>
+  <data key="d10">True</data>
+  <data key="d11">85.5898172214677</data>
+</edge>
+<edge source="-37" target="-39" id="0">
+  <data key="d7">-18</data>
+  <data key="d8">footway</data>
+  <data key="d16">歩行者専用通路(W=2.0m)</data>
+  <data key="d17">2.0</data>
+  <data key="d9">False</data>
+  <data key="d10">False</data>
+  <data key="d11">12.291870736397772</data>
+</edge>
+<edge source="-38" target="-37" id="0">
+  <data key="d7">-17</data>
+  <data key="d8">footway</data>
+  <data key="d16">歩行者専用通路(W=2.0m)</data>
+  <data key="d17">2.0</data>
+  <data key="d9">False</data>
+  <data key="d10">False</data>
+  <data key="d11">85.5898172214677</data>
+</edge>
+<edge source="-38" target="-17" id="0">
+  <data key="d7">-31</data>
+  <data key="d8">footway</data>
+  <data key="d16">歩行者専用通路(W=2.0m)</data>
+  <data key="d17">2.0</data>
+  <data key="d9">False</data>
+  <data key="d10">False</data>
+  <data key="d11">4.042586626915151</data>
+</edge>
+<edge source="-39" target="-37" id="0">
+  <data key="d7">-18</data>
+  <data key="d8">footway</data>
+  <data key="d16">歩行者専用通路(W=2.0m)</data>
+  <data key="d17">2.0</data>
+  <data key="d9">False</data>
+  <data key="d10">True</data>
+  <data key="d11">12.291870736397772</data>
+</edge>
+<edge source="-39" target="-5" id="0">
+  <data key="d7">-32</data>
+  <data key="d8">footway</data>
+  <data key="d16">歩行者専用通路(W=2.0m)</data>
+  <data key="d17">2.0</data>
+  <data key="d9">False</data>
+  <data key="d10">False</data>
+  <data key="d11">4.516435649695454</data>
 </edge>
 </graph></graphml>

@@ -1,5 +1,7 @@
 <?xml version='1.0' encoding='utf-8'?>
-<graphml xmlns="http://graphml.graphdrawing.org/xmlns" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://graphml.graphdrawing.org/xmlns http://graphml.graphdrawing.org/xmlns/1.0/graphml.xsd"><key id="d14" for="edge" attr.name="footway" attr.type="string"/>
+<graphml xmlns="http://graphml.graphdrawing.org/xmlns" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://graphml.graphdrawing.org/xmlns http://graphml.graphdrawing.org/xmlns/1.0/graphml.xsd"><key id="d16" for="edge" attr.name="width" attr.type="string"/>
+<key id="d15" for="edge" attr.name="name" attr.type="string"/>
+<key id="d14" for="edge" attr.name="footway" attr.type="string"/>
 <key id="d13" for="edge" attr.name="service" attr.type="string"/>
 <key id="d12" for="edge" attr.name="access" attr.type="string"/>
 <key id="d11" for="edge" attr.name="bridge" attr.type="string"/>
@@ -14,7 +16,7 @@
 <key id="d2" for="graph" attr.name="crs" attr.type="string"/>
 <key id="d1" for="graph" attr.name="created_with" attr.type="string"/>
 <key id="d0" for="graph" attr.name="created_date" attr.type="string"/>
-<graph edgedefault="directed"><data key="d0">2026-10-15 01:44:23</data>
+<graph edgedefault="directed"><data key="d0">2026-10-19 05:03:03</data>
 <data key="d1">OSMnx 2.1.1</data>
 <data key="d2">epsg:4326</data>
 <node id="522943288">
@@ -2220,6 +2222,82 @@
   <data key="d4">139.7086098</data>
   <data key="d5">crossing</data>
 </node>
+<node id="-1">
+  <data key="d3">36.11040702</data>
+  <data key="d4">139.70686543</data>
+</node>
+<node id="-2">
+  <data key="d3">36.11005176</data>
+  <data key="d4">139.70730371</data>
+</node>
+<node id="-3">
+  <data key="d3">36.10985346</data>
+  <data key="d4">139.70754834</data>
+</node>
+<node id="-4">
+  <data key="d3">36.10932512</data>
+  <data key="d4">139.70689816</data>
+</node>
+<node id="-5">
+  <data key="d3">36.10990305</data>
+  <data key="d4">139.70620077</data>
+</node>
+<node id="-6">
+  <data key="d3">36.11044166</data>
+  <data key="d4">139.70603185</data>
+</node>
+<node id="-7">
+  <data key="d3">36.11072746</data>
+  <data key="d4">139.70621174</data>
+</node>
+<node id="-8">
+  <data key="d3">36.10981533</data>
+  <data key="d4">139.70750138</data>
+</node>
+<node id="-9">
+  <data key="d3">36.10973957</data>
+  <data key="d4">139.70740809</data>
+</node>
+<node id="-10">
+  <data key="d3">36.10953358</data>
+  <data key="d4">139.70715443</data>
+</node>
+<node id="-11">
+  <data key="d3">36.1097317</data>
+  <data key="d4">139.7069096</data>
+</node>
+<node id="-12">
+  <data key="d3">36.10990918</data>
+  <data key="d4">139.70669027</data>
+</node>
+<node id="-13">
+  <data key="d3">36.11006318</data>
+  <data key="d4">139.70649997</data>
+</node>
+<node id="-14">
+  <data key="d3">36.11010429</data>
+  <data key="d4">139.70644916</data>
+</node>
+<node id="-15">
+  <data key="d3">36.11024061</data>
+  <data key="d4">139.7062807</data>
+</node>
+<node id="-16">
+  <data key="d3">36.11028877</data>
+  <data key="d4">139.7062212</data>
+</node>
+<node id="-17">
+  <data key="d3">36.10943898</data>
+  <data key="d4">139.70703813</data>
+</node>
+<node id="-18">
+  <data key="d3">36.10937249</data>
+  <data key="d4">139.70695639</data>
+</node>
+<node id="-19">
+  <data key="d3">36.11038952</data>
+  <data key="d4">139.70609642</data>
+</node>
 <edge source="522943288" target="13691232519" id="0">
   <data key="d6">133597222</data>
   <data key="d7">tertiary</data>
@@ -2999,12 +3077,12 @@
   <data key="d9">True</data>
   <data key="d10">16.502181419078962</data>
 </edge>
-<edge source="1369657711" target="10823726929" id="0">
+<edge source="1369657711" target="-7" id="0">
   <data key="d6">1163807323</data>
   <data key="d7">tertiary</data>
   <data key="d8">False</data>
   <data key="d9">False</data>
-  <data key="d10">76.41965664874297</data>
+  <data key="d10">15.885445730890153</data>
 </edge>
 <edge source="1369657714" target="1369657701" id="0">
   <data key="d6">122618428</data>
@@ -4027,12 +4105,12 @@
   <data key="d9">True</data>
   <data key="d10">10.154940425163012</data>
 </edge>
-<edge source="4445294713" target="10823726772" id="0">
+<edge source="4445294713" target="-3" id="0">
   <data key="d6">122618574</data>
   <data key="d7">unclassified</data>
   <data key="d8">False</data>
   <data key="d9">False</data>
-  <data key="d10">203.71151771410516</data>
+  <data key="d10">50.85913876173809</data>
 </edge>
 <edge source="4445294713" target="1369657649" id="0">
   <data key="d6">122618574</data>
@@ -5419,12 +5497,12 @@
   <data key="d9">False</data>
   <data key="d10">5.845103580108613</data>
 </edge>
-<edge source="10823726772" target="4445294713" id="0">
+<edge source="10823726772" target="-1" id="0">
   <data key="d6">122618574</data>
   <data key="d7">unclassified</data>
   <data key="d8">False</data>
   <data key="d9">True</data>
-  <data key="d10">203.71151771410516</data>
+  <data key="d10">65.94816359585255</data>
 </edge>
 <edge source="10823726773" target="13691868655" id="0">
   <data key="d6">1497573792</data>
@@ -5510,19 +5588,19 @@
   <data key="d9">False</data>
   <data key="d10">6.996957722039286</data>
 </edge>
-<edge source="10823726929" target="1369657711" id="0">
+<edge source="10823726929" target="-6" id="0">
   <data key="d6">1163807323</data>
   <data key="d7">tertiary</data>
   <data key="d8">False</data>
   <data key="d9">True</data>
-  <data key="d10">76.41965664874297</data>
+  <data key="d10">24.881944535553753</data>
 </edge>
-<edge source="10823726930" target="13691871229" id="0">
+<edge source="10823726930" target="-5" id="0">
   <data key="d6">122618675</data>
   <data key="d7">unclassified</data>
   <data key="d8">False</data>
   <data key="d9">False</data>
-  <data key="d10">166.48750469782595</data>
+  <data key="d10">40.13480847907436</data>
 </edge>
 <edge source="10823726930" target="5404913840" id="0">
   <data key="d6">122618675</data>
@@ -8891,12 +8969,12 @@
   <data key="d9">False</data>
   <data key="d10">10.154940425163012</data>
 </edge>
-<edge source="13691871229" target="10823726930" id="0">
+<edge source="13691871229" target="-4" id="0">
   <data key="d6">122618675</data>
   <data key="d7">unclassified</data>
   <data key="d8">False</data>
   <data key="d9">True</data>
-  <data key="d10">166.48750469782595</data>
+  <data key="d10">36.60512856073659</data>
 </edge>
 <edge source="13715390027" target="4969379338" id="0">
   <data key="d6">133597222</data>
@@ -10048,5 +10126,355 @@
   <data key="d8">False</data>
   <data key="d9">True</data>
   <data key="d10">27.6677373612325</data>
+</edge>
+<edge source="-1" target="10823726772" id="0">
+  <data key="d6">122618574</data>
+  <data key="d7">unclassified</data>
+  <data key="d8">False</data>
+  <data key="d9">False</data>
+  <data key="d10">65.94816359585255</data>
+</edge>
+<edge source="-1" target="-2" id="0">
+  <data key="d6">122618574</data>
+  <data key="d7">unclassified</data>
+  <data key="d8">False</data>
+  <data key="d9">True</data>
+  <data key="d10">55.7731860631275</data>
+</edge>
+<edge source="-2" target="-1" id="0">
+  <data key="d6">122618574</data>
+  <data key="d7">unclassified</data>
+  <data key="d8">False</data>
+  <data key="d9">False</data>
+  <data key="d10">55.7731860631275</data>
+</edge>
+<edge source="-2" target="-3" id="0">
+  <data key="d6">122618574</data>
+  <data key="d7">unclassified</data>
+  <data key="d8">False</data>
+  <data key="d9">True</data>
+  <data key="d10">31.131029308030012</data>
+</edge>
+<edge source="-3" target="-2" id="0">
+  <data key="d6">122618574</data>
+  <data key="d7">unclassified</data>
+  <data key="d8">False</data>
+  <data key="d9">False</data>
+  <data key="d10">31.131029308030012</data>
+</edge>
+<edge source="-3" target="4445294713" id="0">
+  <data key="d6">122618574</data>
+  <data key="d7">unclassified</data>
+  <data key="d8">False</data>
+  <data key="d9">True</data>
+  <data key="d10">50.85913876173809</data>
+</edge>
+<edge source="-3" target="-8" id="0">
+  <data key="d6">-19</data>
+  <data key="d7">residential</data>
+  <data key="d15">区画道路(W=6.0m)</data>
+  <data key="d16">6.0</data>
+  <data key="d8">False</data>
+  <data key="d9">True</data>
+  <data key="d10">5.981038006139461</data>
+</edge>
+<edge source="-4" target="13691871229" id="0">
+  <data key="d6">122618675</data>
+  <data key="d7">unclassified</data>
+  <data key="d8">False</data>
+  <data key="d9">False</data>
+  <data key="d10">36.60512856073659</data>
+</edge>
+<edge source="-4" target="-5" id="0">
+  <data key="d6">122618675</data>
+  <data key="d7">unclassified</data>
+  <data key="d8">False</data>
+  <data key="d9">True</data>
+  <data key="d10">89.74756766017887</data>
+</edge>
+<edge source="-4" target="-18" id="0">
+  <data key="d6">-20</data>
+  <data key="d7">residential</data>
+  <data key="d15">区画道路(W=6.0m)</data>
+  <data key="d16">6.0</data>
+  <data key="d8">False</data>
+  <data key="d9">True</data>
+  <data key="d10">7.423487482003329</data>
+</edge>
+<edge source="-5" target="-4" id="0">
+  <data key="d6">122618675</data>
+  <data key="d7">unclassified</data>
+  <data key="d8">False</data>
+  <data key="d9">False</data>
+  <data key="d10">89.74756766017887</data>
+</edge>
+<edge source="-5" target="10823726930" id="0">
+  <data key="d6">122618675</data>
+  <data key="d7">unclassified</data>
+  <data key="d8">False</data>
+  <data key="d9">True</data>
+  <data key="d10">40.13480847907436</data>
+</edge>
+<edge source="-6" target="10823726929" id="0">
+  <data key="d6">1163807323</data>
+  <data key="d7">tertiary</data>
+  <data key="d8">False</data>
+  <data key="d9">False</data>
+  <data key="d10">24.881944535553753</data>
+</edge>
+<edge source="-6" target="-7" id="0">
+  <data key="d6">1163807323</data>
+  <data key="d7">tertiary</data>
+  <data key="d8">False</data>
+  <data key="d9">True</data>
+  <data key="d10">35.652266392328556</data>
+</edge>
+<edge source="-6" target="-19" id="0">
+  <data key="d6">-21</data>
+  <data key="d7">residential</data>
+  <data key="d15">区画道路(W=6.0m)</data>
+  <data key="d16">6.0</data>
+  <data key="d8">False</data>
+  <data key="d9">True</data>
+  <data key="d10">8.201167586407205</data>
+</edge>
+<edge source="-7" target="-6" id="0">
+  <data key="d6">1163807323</data>
+  <data key="d7">tertiary</data>
+  <data key="d8">False</data>
+  <data key="d9">False</data>
+  <data key="d10">35.652266392328556</data>
+</edge>
+<edge source="-7" target="1369657711" id="0">
+  <data key="d6">1163807323</data>
+  <data key="d7">tertiary</data>
+  <data key="d8">False</data>
+  <data key="d9">True</data>
+  <data key="d10">15.885445730890153</data>
+</edge>
+<edge source="-8" target="-9" id="0">
+  <data key="d6">-1</data>
+  <data key="d7">residential</data>
+  <data key="d15">区画道路(W=6.0m)</data>
+  <data key="d16">6.0</data>
+  <data key="d8">False</data>
+  <data key="d9">False</data>
+  <data key="d10">11.882750291375343</data>
+</edge>
+<edge source="-8" target="-3" id="0">
+  <data key="d6">-19</data>
+  <data key="d7">residential</data>
+  <data key="d15">区画道路(W=6.0m)</data>
+  <data key="d16">6.0</data>
+  <data key="d8">False</data>
+  <data key="d9">False</data>
+  <data key="d10">5.981038006139461</data>
+</edge>
+<edge source="-9" target="-10" id="0">
+  <data key="d6">-1</data>
+  <data key="d7">residential</data>
+  <data key="d15">区画道路(W=6.0m)</data>
+  <data key="d16">6.0</data>
+  <data key="d8">False</data>
+  <data key="d9">False</data>
+  <data key="d10">32.309397823412354</data>
+</edge>
+<edge source="-9" target="-8" id="0">
+  <data key="d6">-1</data>
+  <data key="d7">residential</data>
+  <data key="d15">区画道路(W=6.0m)</data>
+  <data key="d16">6.0</data>
+  <data key="d8">False</data>
+  <data key="d9">True</data>
+  <data key="d10">11.882750291375343</data>
+</edge>
+<edge source="-10" target="-9" id="0">
+  <data key="d6">-1</data>
+  <data key="d7">residential</data>
+  <data key="d15">区画道路(W=6.0m)</data>
+  <data key="d16">6.0</data>
+  <data key="d8">False</data>
+  <data key="d9">True</data>
+  <data key="d10">32.309397823412354</data>
+</edge>
+<edge source="-10" target="-11" id="0">
+  <data key="d6">-2</data>
+  <data key="d7">residential</data>
+  <data key="d15">区画道路(W=6.0m)</data>
+  <data key="d16">6.0</data>
+  <data key="d8">False</data>
+  <data key="d9">False</data>
+  <data key="d10">31.129610487957045</data>
+</edge>
+<edge source="-10" target="-17" id="0">
+  <data key="d6">-3</data>
+  <data key="d7">residential</data>
+  <data key="d15">区画道路(W=6.0m)</data>
+  <data key="d16">6.0</data>
+  <data key="d8">False</data>
+  <data key="d9">False</data>
+  <data key="d10">14.825788021463815</data>
+</edge>
+<edge source="-11" target="-12" id="0">
+  <data key="d6">-2</data>
+  <data key="d7">residential</data>
+  <data key="d15">区画道路(W=6.0m)</data>
+  <data key="d16">6.0</data>
+  <data key="d8">False</data>
+  <data key="d9">False</data>
+  <data key="d10">27.886911061537255</data>
+</edge>
+<edge source="-11" target="-10" id="0">
+  <data key="d6">-2</data>
+  <data key="d7">residential</data>
+  <data key="d15">区画道路(W=6.0m)</data>
+  <data key="d16">6.0</data>
+  <data key="d8">False</data>
+  <data key="d9">True</data>
+  <data key="d10">31.129610487957045</data>
+</edge>
+<edge source="-12" target="-13" id="0">
+  <data key="d6">-2</data>
+  <data key="d7">residential</data>
+  <data key="d15">区画道路(W=6.0m)</data>
+  <data key="d16">6.0</data>
+  <data key="d8">False</data>
+  <data key="d9">False</data>
+  <data key="d10">24.196692452506813</data>
+</edge>
+<edge source="-12" target="-11" id="0">
+  <data key="d6">-2</data>
+  <data key="d7">residential</data>
+  <data key="d15">区画道路(W=6.0m)</data>
+  <data key="d16">6.0</data>
+  <data key="d8">False</data>
+  <data key="d9">True</data>
+  <data key="d10">27.886911061537255</data>
+</edge>
+<edge source="-13" target="-14" id="0">
+  <data key="d6">-2</data>
+  <data key="d7">residential</data>
+  <data key="d15">区画道路(W=6.0m)</data>
+  <data key="d16">6.0</data>
+  <data key="d8">False</data>
+  <data key="d9">False</data>
+  <data key="d10">6.459877018825686</data>
+</edge>
+<edge source="-13" target="-12" id="0">
+  <data key="d6">-2</data>
+  <data key="d7">residential</data>
+  <data key="d15">区画道路(W=6.0m)</data>
+  <data key="d16">6.0</data>
+  <data key="d8">False</data>
+  <data key="d9">True</data>
+  <data key="d10">24.196692452506813</data>
+</edge>
+<edge source="-14" target="-15" id="0">
+  <data key="d6">-2</data>
+  <data key="d7">residential</data>
+  <data key="d15">区画道路(W=6.0m)</data>
+  <data key="d16">6.0</data>
+  <data key="d8">False</data>
+  <data key="d9">False</data>
+  <data key="d10">21.41923258768816</data>
+</edge>
+<edge source="-14" target="-13" id="0">
+  <data key="d6">-2</data>
+  <data key="d7">residential</data>
+  <data key="d15">区画道路(W=6.0m)</data>
+  <data key="d16">6.0</data>
+  <data key="d8">False</data>
+  <data key="d9">True</data>
+  <data key="d10">6.459877018825686</data>
+</edge>
+<edge source="-15" target="-16" id="0">
+  <data key="d6">-2</data>
+  <data key="d7">residential</data>
+  <data key="d15">区画道路(W=6.0m)</data>
+  <data key="d16">6.0</data>
+  <data key="d8">False</data>
+  <data key="d9">False</data>
+  <data key="d10">7.566190673120165</data>
+</edge>
+<edge source="-15" target="-14" id="0">
+  <data key="d6">-2</data>
+  <data key="d7">residential</data>
+  <data key="d15">区画道路(W=6.0m)</data>
+  <data key="d16">6.0</data>
+  <data key="d8">False</data>
+  <data key="d9">True</data>
+  <data key="d10">21.41923258768816</data>
+</edge>
+<edge source="-16" target="-15" id="0">
+  <data key="d6">-2</data>
+  <data key="d7">residential</data>
+  <data key="d15">区画道路(W=6.0m)</data>
+  <data key="d16">6.0</data>
+  <data key="d8">False</data>
+  <data key="d9">True</data>
+  <data key="d10">7.566190673120165</data>
+</edge>
+<edge source="-16" target="-19" id="0">
+  <data key="d6">-4</data>
+  <data key="d7">residential</data>
+  <data key="d15">区画道路(W=6.0m)</data>
+  <data key="d16">6.0</data>
+  <data key="d8">False</data>
+  <data key="d9">True</data>
+  <data key="d10">15.84783788637971</data>
+</edge>
+<edge source="-17" target="-18" id="0">
+  <data key="d6">-3</data>
+  <data key="d7">residential</data>
+  <data key="d15">区画道路(W=6.0m)</data>
+  <data key="d16">6.0</data>
+  <data key="d8">False</data>
+  <data key="d9">False</data>
+  <data key="d10">10.420249079812706</data>
+</edge>
+<edge source="-17" target="-10" id="0">
+  <data key="d6">-3</data>
+  <data key="d7">residential</data>
+  <data key="d15">区画道路(W=6.0m)</data>
+  <data key="d16">6.0</data>
+  <data key="d8">False</data>
+  <data key="d9">True</data>
+  <data key="d10">14.825788021463815</data>
+</edge>
+<edge source="-18" target="-17" id="0">
+  <data key="d6">-3</data>
+  <data key="d7">residential</data>
+  <data key="d15">区画道路(W=6.0m)</data>
+  <data key="d16">6.0</data>
+  <data key="d8">False</data>
+  <data key="d9">True</data>
+  <data key="d10">10.420249079812706</data>
+</edge>
+<edge source="-18" target="-4" id="0">
+  <data key="d6">-20</data>
+  <data key="d7">residential</data>
+  <data key="d15">区画道路(W=6.0m)</data>
+  <data key="d16">6.0</data>
+  <data key="d8">False</data>
+  <data key="d9">False</data>
+  <data key="d10">7.423487482003329</data>
+</edge>
+<edge source="-19" target="-16" id="0">
+  <data key="d6">-4</data>
+  <data key="d7">residential</data>
+  <data key="d15">区画道路(W=6.0m)</data>
+  <data key="d16">6.0</data>
+  <data key="d8">False</data>
+  <data key="d9">False</data>
+  <data key="d10">15.84783788637971</data>
+</edge>
+<edge source="-19" target="-6" id="0">
+  <data key="d6">-21</data>
+  <data key="d7">residential</data>
+  <data key="d15">区画道路(W=6.0m)</data>
+  <data key="d16">6.0</data>
+  <data key="d8">False</data>
+  <data key="d9">False</data>
+  <data key="d10">8.201167586407205</data>
 </edge>
 </graph></graphml>

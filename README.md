@@ -55,7 +55,9 @@ python scripts/make_report.py                       # 報告資料（要 require
 | ファイル | 内容 |
 |---|---|
 | `houses.gpkg` | 既存街区の住宅ポイント 171戸 |
-| `houses_new_lots_59.geojson` | 新規街区の区画ポイント 59区画（`lot_no`＝区画番号）。区画内道路は OSM 未収録のため、外周道路まで直線で接続 |
+| `houses_new_lots_59.geojson` | 新規街区の区画ポイント 59区画（`lot_no`＝区画番号） |
+| `new_roads_patch.osm` / `new_roads.geojson` | 新規街区の区画道路（W6m）7本・歩行者専用通路（W2m）25本。計画図をデジタイズ |
+| `map_merged.osm` | map.osm＋新規街区の道路（`python scripts/merge_osm.py data/raw/map.osm data/raw/new_roads_patch.osm data/raw/map_merged.osm`）。precompute はこれを使う |
 | `map.osm` | OSM抽出（南栗橋駅〜街区〜イオン）。道路網の元 |
 | `survey.xlsx` | 2023アンケート集計表（曜日×5〜22時台×交通手段） |
 | `ride_logs/` | 走行記録（fit・スマホ位置ログ）と `speed_summary.csv`（自転車12.6・キックボード14.0 km/h） |
