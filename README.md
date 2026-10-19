@@ -47,6 +47,8 @@ python scripts/make_report.py                       # 報告資料（要 require
 
 前提値と出典は `docs/前提と出典.md`。値はすべて `config.yaml` にあり、画面とバッチ計算の両方に反映されます。
 
+結果は `data/output/study/`（現在は230戸）。既存街区のみ（171戸）の結果は `data/output/study_171/` に保存。
+
 ### 街区の追加
 `config.yaml` の `paths.houses` に `{name: 街区名, file: data/raw/○○.geojson}` を追加し、
 `python scripts/precompute_network.py` を再実行する（GeoPackage / GeoJSON / CSV、点データ）。

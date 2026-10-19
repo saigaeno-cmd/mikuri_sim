@@ -415,7 +415,7 @@ def main():
         rec[scen] = dict(pattern=best[0], cap=best[1], nb=int(round(x["自転車"].median())),
                          nk=int(round(x["キックボード"].median())),
                          tot=rng_txt(x["合計台数"]), cost=x["費用_年間総費用"].median(), st_peak=int(x["月_駅ポート最大在庫"].max()),
-                         ful=x["月_充足率"].median(), per_trip=x["費用_1トリップあたり費用"].median(),
+                         ful=x["月_充足率"].median(), rf=x["月_返却失敗率"].median(), per_trip=x["費用_1トリップあたり費用"].median(),
                          per_veh=x["費用_1台あたり年間費用"].median(), util=x["費用_稼働率(回/台/日)"].median(),
                          reb=x["費用_運営費に占める再配置費用"].median(), slots=int(x["費用_区画数"].median()),
                          rows=x)
@@ -517,7 +517,8 @@ def main():
         txt = (f"住宅側ポート3か所・電動アシスト自転車{r['nb']}台＋電動キックボード{r['nk']}台・"
                f"駅ポート{r['cap']}台分（最大在庫{r['st_peak']}台、朝の初期配置{stp}台）・運用は{PAT_NAME[r['pattern']]}、"
                f"年間費用は{yen_man(r['cost'])}（1トリップ{r['per_trip']:,.0f}円・1台{r['per_veh'] / 1e4:,.1f}万円/年）。"
-               f"1か月の充足率は{r['ful']:.1%}。")
+               f"1か月の充足率は{r['ful']:.1%}"
+               + (f"、ただし駅ポートが満車で返却失敗が{r['rf']:.0%}。" if r["rf"] > 0.05 else "。"))
         card(s, 1.15, y, 10.3, 3.35, fill=WHITE)
         tb(s, 1.45, y + 0.25, 9.8, 0.5, (f"{short_scen(scen)}需要（転換率{cfg['demand_scenarios'][scen]:.0%}・暫定）",
                                          {"bold": True, "color": NAVY, "size": 20}))
@@ -538,7 +539,7 @@ def main():
             return float(ok[col].median()) if len(ok) and len(ok) >= len(x) / 2 else np.nan
 
         s = frame("新規街区の追加による変化", "Effect of the New District",
-                  f"171戸 → {n_h}戸（{dist_txt}）、代替乗車なし・運用a・駅ポート{base_cap}台")
+                  f"171戸→{n_h}戸（{dist_txt}）・代替なし・運用a・駅{base_cap}台")
         cd = CategoryChartData()
         cd.categories = [short_scen(x) for x in scens]
         cd.add_series("171戸", [med0(d0, sc, 0.05) for sc in scens])
@@ -573,6 +574,8 @@ def main():
         tb(s, 9.7, 6.4, 9.15, 3.8, [
             f"戸数は{n_h / 171 - 1:+.0%}。需要は戸数に比例して増えるが、台数の増え方は需要シナリオと駅ポートの空きで変わる。",
             "新規街区はモビリティステーションから離れているため、住宅側ポートの位置も見直される（推奨案のページの地図）。",
+            *([f"高位需要では駅ポート{base_cap}台が朝に満車になり、失敗率5%に届かない回が多い（駅ポート容量のページ）。"]
+              if np.isnan(med0(d, hi_s, 0.05)) else []),
             ("新規街区の道路は計画図（区画道路・歩行者専用通路）をデジタイズして地図に統合。", {"size": 13, "color": MUTED})],
            size=14, space_after=8)
 
@@ -737,6 +740,11 @@ def main():
         rows.append(rr)
     table(s, 10.2, 3.1, 8.65, pd.DataFrame(rows, columns=["需要"] + [f"容量{c}台" for c in caps]),
           col_w=[1.7, 2.3, 2.3, 2.35], size=12, row_h=0.6)
+    hi32 = sel(hi_s, cap=max(caps))
+    hi_rf = hi32[hi32["達成"]]["月_返却失敗率"].median() if len(hi32) else np.nan
+    cap_note = (f"低位なら{base_cap}台で足りる。高位では{max(caps)}台にすると台数・費用とも下がる"
+                + (f"が、それでも返却失敗が{hi_rf:.0%}残る。区画の拡張か代替乗車(ii)の検討が必要。"
+                   if hi_rf > 0.05 else "。"))
     cap_lines = []
     for scen in (lo_s, hi_s):
         f_ = {c: med_fleet(scen, cap=c) for c in caps}
@@ -747,7 +755,7 @@ def main():
         ("表：返却失敗率／駅ポートの最大在庫（1か月、中央値）", {"size": 12, "color": MUTED}),
         "満車で返せない車両は区画外に置かれ、夜の回収まで使えない。そのため夕方の帰宅で不足し、台数が増える。",
         *cap_lines,
-        "低位なら25台で足りる。高位では32台（区画②も2列）にすると台数・費用とも下がる。"], size=14, space_after=8)
+        cap_note], size=14, space_after=8)
 
     # 10 リバランス a/b/c
     s = frame("リバランス運用 a・b・c の比較", "Rebalancing Patterns", f"日中に駅の余剰を戻しても台数は減らない（駅ポート{base_cap}台）")
@@ -759,7 +767,8 @@ def main():
             if not len(ok):
                 rows.append([short_scen(scen), PAT_NAME[pat], "未達", "", "", "", ""])
                 continue
-            rows.append([short_scen(scen), PAT_NAME[pat], rng_txt(ok["合計台数"]), f"{ok['月_作業回数/日'].median():.1f}",
+            rows.append([short_scen(scen), PAT_NAME[pat], rng_txt(ok["合計台数"]) + ("" if len(ok) == len(x) else f"［{len(ok)}/{len(x)}回達成］"),
+                         f"{ok['月_作業回数/日'].median():.1f}",
                          f"{ok['月_移動台数/日'].median():.1f}", f"{ok['月_作業時間(分/日)'].median():.0f}",
                          yen_man(ok["費用_年間総費用"].median())])
     table(s, 1.15, 3.1, 11.0, pd.DataFrame(rows, columns=["需要", "運用", "最小台数", "作業回/日", "移動台/日", "作業分/日", "年間費用"]),
@@ -771,8 +780,9 @@ def main():
     if buf is not None:
         bb = buf.copy()
         bb["需要シナリオ"] = bb["需要シナリオ"].map(short_scen)
+        bb["合計台数"] = bb["合計台数"].map(lambda v: "未達" if pd.isna(v) else f"{v:.0f}")
         bb = bb[["需要シナリオ", "運用", "駅に残す台数の基準", "合計台数"]]
-        tb(s, 12.5, 7.15, 6.35, 0.4, ("追加検証：駅に残す台数を95%点にした場合（1回）", {"bold": True, "size": 13, "color": MUTED}))
+        tb(s, 12.5, 7.15, 6.35, 0.4, (f"追加検証：駅に残す台数を95%点にした場合（1回・駅{base_cap}台）", {"bold": True, "size": 13, "color": MUTED}))
         table(s, 12.5, 7.6, 6.35, bb.rename(columns={"需要シナリオ": "需要", "駅に残す台数の基準": "駅に残す基準", "合計台数": "台数"}),
               col_w=[0.9, 0.7, 3.75, 1.0], size=10, row_h=0.32)
     tb(s, 1.15, 3.1 + 0.55 * (len(rows) + 1) + 0.4, 11.0, 2.6, [
@@ -871,19 +881,23 @@ def main():
                 pts = sens[(sens["項目"] == it)]
                 if not len(pts):
                     continue
-                lo_v, hi_v = pts["値"].min(), pts["値"].max()
-                if metric == "合計台数":
-                    get = lambda v: sv_a[(sv_a["項目"] == it) & np.isclose(sv_a["値"], v)]["合計台数"]
-                    lo_m, hi_m = get(lo_v), get(hi_v)
-                    lo_m = float(lo_m.iloc[0]) if len(lo_m) else np.nan
-                    hi_m = float(hi_m.iloc[0]) if len(hi_m) else np.nan
-                else:
-                    bl, bh = best_at(it, lo_v), best_at(it, hi_v)
-                    lo_m = float(bl["年間総費用"]) if bl is not None else np.nan
-                    hi_m = float(bh["年間総費用"]) if bh is not None else np.nan
-                recs.append((f"{it}\n{labels[it](lo_v)}〜{labels[it](hi_v)}", (lo_m - base) * scale, (hi_m - base) * scale))
+
+                def val(v):
+                    if metric == "合計台数":
+                        m = sv_a[(sv_a["項目"] == it) & np.isclose(sv_a["値"], v)]["合計台数"]
+                        return float(m.iloc[0]) if len(m) else np.nan
+                    b_ = best_at(it, v)
+                    return float(b_["年間総費用"]) if b_ is not None else np.nan
+
+                grid = sorted(pts["値"].unique())
+                # 目標に届かない端は、届く範囲の端の値で描き、ラベルに「未達」を書く
+                lo_v = next((v for v in grid if not np.isnan(val(v))), grid[0])
+                hi_v = next((v for v in grid[::-1] if not np.isnan(val(v))), grid[-1])
+                miss = [labels[it](v) for v in grid if np.isnan(val(v))]
+                lab = f"{it}\n{labels[it](lo_v)}〜{labels[it](hi_v)}" + (f"\n（{'・'.join(miss)}は未達）" if miss else "")
+                recs.append((lab, (val(lo_v) - base) * scale, (val(hi_v) - base) * scale, bool(miss)))
             recs = [r for r in recs if not (np.isnan(r[1]) and np.isnan(r[2]))]
-            recs.sort(key=lambda r: abs(np.nan_to_num(r[1])) + abs(np.nan_to_num(r[2])))
+            recs.sort(key=lambda r: (r[3], abs(np.nan_to_num(r[1])) + abs(np.nan_to_num(r[2]))))
             cd = CategoryChartData()
             cd.categories = [r[0] for r in recs]
             cd.add_series("下限の値のとき", [float(np.nan_to_num(r[1])) for r in recs], number_format=fmt)
@@ -1017,9 +1031,10 @@ def main():
         f"高位需要は{fl(rh_)}・駅ポート{rh_['cap']}台。",
         "日中のリバランス（b・c）は台数・費用を増やすだけで効果が無い。駅ポートが満車になると返却失敗で台数が急増するため、"
         "需要が高位に近ければ区画②を2列（32台）にする。",
-        f"{reps}回のばらつきは最小台数で数台程度。計画は上側の値で見込むと安全。",
+        f"{reps}回のばらつきは、低位需要で数台、駅ポートが満車になる高位需要では10台以上。計画は上側の値で見込むと安全。",
         "需要（転換率）が結果を最も左右するため、東京都資料での確定と再計算を最優先で進める。"])
     put(by_id(s, 23), "モビリティポート検討")
+    by_id(s, 23).top = Inches(9.6)
 
     # 付録：全条件の一覧
     for scen in scens:
