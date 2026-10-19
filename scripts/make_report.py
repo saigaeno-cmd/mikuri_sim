@@ -526,6 +526,56 @@ def main():
     tb(s, 11.9, 10.6, 7.0, 0.4, "■ P1〜P3：住宅側ポート（点の色＝利用するポート）　◆ 駅西口ポート・モビリティステーション",
        size=11, color=MUTED)
 
+    # 3b 新規街区の追加による変化（171戸の結果があるとき）
+    prev_p = out_dir.parent / "study_171" / "results.csv"
+    if prev_p.exists() and n_h != 171:
+        d0 = load_results(prev_p.parent)
+
+        def med0(df, scen, tgt, col="合計台数", pat="a", cap=base_cap):
+            x = df[(df["需要シナリオ"] == scen) & (df["代替乗車"] == "なし(i)") & (df["運用"] == pat)
+                   & (df["駅ポート容量"] == cap) & (df["目標失敗率"] == tgt)]
+            ok = x[x["達成"]]
+            return float(ok[col].median()) if len(ok) and len(ok) >= len(x) / 2 else np.nan
+
+        s = frame("新規街区の追加による変化", "Effect of the New District",
+                  f"171戸 → {n_h}戸（{dist_txt}）、代替乗車なし・運用a・駅ポート{base_cap}台")
+        cd = CategoryChartData()
+        cd.categories = [short_scen(x) for x in scens]
+        cd.add_series("171戸", [med0(d0, sc, 0.05) for sc in scens])
+        cd.add_series(f"{n_h}戸", [med0(d, sc, 0.05) for sc in scens])
+        ch = s.shapes.add_chart(XL_CHART_TYPE.COLUMN_CLUSTERED, Inches(1.15), Inches(3.0), Inches(8.2), Inches(7.2), cd).chart
+        style_chart(ch)
+        color_series(ch, [LIGHT, NAVY])
+        ch.plots[0].has_data_labels = True
+        ch.plots[0].data_labels.position = XL_LABEL_POSITION.OUTSIDE_END
+        ch.plots[0].data_labels.font.size = Pt(12)
+        chart_title(ch, "失敗率5%の最小台数（中央値、空欄＝未達）")
+        zero_axis(ch)
+
+        def fmt_n(v):
+            return "未達" if np.isnan(v) else f"{v:.0f}台"
+
+        def fmt_c(v):
+            return "—" if np.isnan(v) else f"{v / 1e4:,.0f}万円"
+
+        def ratio(a_, b_):
+            return "—" if np.isnan(a_) or np.isnan(b_) else f"{b_ / a_ - 1:+.0%}"
+
+        rows = []
+        for sc in scens:
+            f0, f1 = med0(d0, sc, 0.20), med0(d, sc, 0.20)
+            g0, g1 = med0(d0, sc, 0.05), med0(d, sc, 0.05)
+            c0, c1 = med0(d0, sc, 0.05, "費用_年間総費用"), med0(d, sc, 0.05, "費用_年間総費用")
+            rows.append([short_scen(sc), f"{fmt_n(f0)}→{fmt_n(f1)}", f"{fmt_n(g0)}→{fmt_n(g1)}（{ratio(g0, g1)}）",
+                         f"{fmt_c(c0)}→{fmt_c(c1)}"])
+        table(s, 9.7, 3.1, 9.15, pd.DataFrame(rows, columns=["需要", "充足率80%", "失敗率5%", "年間費用（5%）"]),
+              col_w=[1.4, 2.2, 3.05, 2.5], size=12, row_h=0.6)
+        tb(s, 9.7, 6.4, 9.15, 3.8, [
+            f"戸数は{n_h / 171 - 1:+.0%}。需要は戸数に比例して増えるが、台数の増え方は需要シナリオと駅ポートの空きで変わる。",
+            "新規街区はモビリティステーションから離れているため、住宅側ポートの位置も見直される（推奨案のページの地図）。",
+            ("新規街区の区画内道路は地図（OSM）に無く、外周道路まで直線で接続した暫定計算。", {"size": 13, "color": MUTED})],
+           size=14, space_after=8)
+
     # 4 検討の概要と条件
     s = frame("検討の概要と条件", "Overview & Conditions", f"全{n_cond}条件 × 各{reps}回（乱数を変えて）を計算")
     rows = [("需要シナリオ", "低位・高位（暫定）／旧シナリオ転換率10%・30%"),
@@ -950,10 +1000,11 @@ def main():
             ("駅ポート", "1台1m×2m、基本25台（区画①18＋区画②7）", "確定"),
             ("需要（転換率）", "低位12%・高位24%、旧10%・30%", "暫定"),
             ("気象", "雨・猛暑・強風・寒さの倍率と月別出現日数", "要確認"),
+            ("新規街区の道路", "区画内道路は未収録。外周道路まで直線で接続（中央値41m）", "暫定"),
             ("電池", "キックボード航続30km、20%未満で交換・4時間停止", "仮定"),
             ("費用", "車両15万円・3年、維持1.5万円/年、ポート20万円・5年ほか", "仮定")]
     table(s, 1.15, 3.1, 17.7, pd.DataFrame(rows, columns=["項目", "値", "状態"]), col_w=[3.0, 12.5, 2.2], size=14, left_cols=(0, 1),
-          row_h=0.62, highlight=lambda i: rows[i][2] in ("暫定", "要確認"))
+          row_h=0.58, highlight=lambda i: rows[i][2] in ("暫定", "要確認"))
 
     # 19 まとめ
     s = dup(prs, T[10])
