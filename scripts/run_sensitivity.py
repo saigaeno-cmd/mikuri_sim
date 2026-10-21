@@ -3,7 +3,8 @@
 基準：需要＝低位と高位の中間、代替乗車は config（fleet_mix.substitution）、駅ポート容量25台、手続き60秒、自転車比率60.3%、歩行4.8km/h、
       費用は config の値。目標＝貸出失敗率5%以下（平日・晴れの1日で探索）。
 推奨案：運用 a/b/c のうち、目標を満たす最小台数での年間総費用が最も小さいもの。
-使い方: python scripts/run_sensitivity.py [--procs 4] [--districts 既存街区 新規街区]
+使い方: python scripts/run_sensitivity.py [--procs 4] [--reps 10] [--districts 既存街区 新規街区]
+各点を乱数を変えて reps 回計算し、報告資料では中央値を使う。
 """
 from __future__ import annotations
 
@@ -20,7 +21,7 @@ import pandas as pd
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from src.loaders import load_config, load_network, load_survey, resolve, survey_path  # noqa: E402
 from src.plan import demand_hourly, fleet_for, make_ops, optimal_layout  # noqa: E402
-from src.study import annual_cost, min_fleet, month_eval  # noqa: E402
+from src.study import annual_cost, min_fleet, year_eval  # noqa: E402
 
 TARGET = 0.05
 G = {}
@@ -60,7 +61,7 @@ def _init(districts=None):
 
 def run_point(args):
     """1つの条件・運用で：最小台数（目標5%）→ 1か月 → 費用（倍率1）。"""
-    param, value, pattern, n_rep = args
+    param, value, pattern, n_rep, seed = args
     cfg = copy.deepcopy(G["cfg"])
     net, sv = G["net"], G["survey"]
     v = base_values(cfg)
@@ -73,12 +74,12 @@ def run_point(args):
     kw = dict(pattern=pattern, substitution=cfg["fleet_mix"]["substitution"], ebike_share=v["自転車の比率"], procedure_sec=v["手続き時間（秒）"],
               walk_kmh=v["歩行速度（km/h）"])
     ops = make_ops(cfg, **kw)
-    r = min_fleet(L, ops, oh, rh, targets=(TARGET,), n_rep=n_rep, seed=0)[TARGET]
-    row = {"項目": param, "値": value, "運用": pattern}
+    r = min_fleet(L, ops, oh, rh, targets=(TARGET,), n_rep=n_rep, seed=seed)[TARGET]
+    row = {"項目": param, "値": value, "運用": pattern, "回": seed}
     if r is None:
         return {**row, "達成": False}, None
-    F = fleet_for(L, r["自転車"], r["キックボード"], oh, rh, ops)
-    summ, daily = month_eval(L, F, cfg, {"平日": (oh, rh), "休日": (oh2, rh2)}, seed=0, **kw)
+    F = fleet_for(L, r["自転車"], r["キックボード"], oh, rh, ops, seed=seed)
+    summ, daily, _ = year_eval(L, F, cfg, {"平日": (oh, rh), "休日": (oh2, rh2)}, seed=seed, **kw)
     cost = annual_cost(cfg, F, L.k, daily, cap)
     return ({**row, "達成": True, "自転車": r["自転車"], "キックボード": r["キックボード"], "合計台数": r["合計"],
              "失敗率": r["失敗率"], "月_充足率": summ["充足率"], "年間総費用": cost["年間総費用"]},
@@ -89,14 +90,15 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--procs", type=int, default=4)
     ap.add_argument("--districts", nargs="*", default=None, help="対象街区（例：既存街区 新規街区）。省略で全街区")
-    ap.add_argument("--n-rep", type=int, default=40)
+    ap.add_argument("--n-rep", type=int, default=60)
+    ap.add_argument("--reps", type=int, default=10, help="各点の繰り返し回数（乱数を変える）")
     a = ap.parse_args()
     cfg = load_config()
     base = base_values(cfg)
     rg = ranges(cfg)
     # 各項目の格子（基準値を含む）と両端。基準点＝需要格子の中央（他の項目は基準値）
     pts = sorted({(p, round(float(x), 4)) for p, (lo, hi, grid) in rg.items() for x in [lo, hi, *grid]})
-    jobs = [(p, x, pat, a.n_rep) for (p, x) in pts for pat in ("a", "b", "c")]
+    jobs = [(p, x, pat, a.n_rep, seed) for (p, x) in pts for pat in ("a", "b", "c") for seed in range(a.reps)]
     print(f"{len(jobs)} 件の探索")
     t0 = time.time()
     rows, keep = [], {}
@@ -104,7 +106,7 @@ def main():
         for i, (row, extra) in enumerate(pool.imap_unordered(run_point, jobs), 1):
             rows.append(row)
             if extra is not None:
-                keep[(row["項目"], row["値"], row["運用"])] = extra
+                keep[(row["項目"], row["値"], row["運用"], row["回"])] = extra
             if i % 10 == 0:
                 print(f"  {i}/{len(jobs)}  {time.time() - t0:.0f}秒", flush=True)
     df = pd.DataFrame(rows)
@@ -116,14 +118,15 @@ def main():
     for name, (kw, lo, hi, grid) in COST_ONLY.items():
         for x in sorted({lo, hi, *grid}):
             for pat in ("a", "b", "c"):
-                ex = keep.get(("需要（転換率）", b_d, pat))
-                if ex is None:
-                    continue
-                F, k, daily, cap = ex
-                c = annual_cost(cfg, F, k, daily, cap, **{kw: x})
-                nb, nk = F.n
-                cost_rows.append({"項目": name, "値": x, "運用": pat, "達成": True, "自転車": nb, "キックボード": nk,
-                                  "合計台数": nb + nk, "年間総費用": c["年間総費用"]})
+                for seed in range(a.reps):
+                    ex = keep.get(("需要（転換率）", b_d, pat, seed))
+                    if ex is None:
+                        continue
+                    F, k, daily, cap = ex
+                    c = annual_cost(cfg, F, k, daily, cap, **{kw: x})
+                    nb, nk = F.n
+                    cost_rows.append({"項目": name, "値": x, "運用": pat, "回": seed, "達成": True, "自転車": nb,
+                                      "キックボード": nk, "合計台数": nb + nk, "年間総費用": c["年間総費用"]})
     df = pd.concat([df, pd.DataFrame(cost_rows)], ignore_index=True)
     df.to_csv(out / "sensitivity.csv", index=False, encoding="utf-8-sig")
     print("保存:", out / "sensitivity.csv", f"（{time.time() - t0:.0f}秒）")

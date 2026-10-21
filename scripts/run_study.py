@@ -2,9 +2,9 @@
 
 条件：需要シナリオ × 代替乗車（なし(i)/あり(ii)）× リバランス運用（a/b/c）× 駅ポート容量（18/25/32台）
 各回（seed）で：
-  1) 平日・晴れの1日を60回シミュレーションし、貸出失敗率 20%（充足率80%）・5%・1% 以下を満たす
+  1) 平日・晴れの1日を最大60回シミュレーションし、貸出失敗率 20%（充足率80%）・5%・1% 以下を満たす
      最小の「自転車＋キックボード」台数を探索
-  2) 見つかった各案で1か月（平日・休日、気象は平年の出現日数から抽選）をシミュレーションし、年間費用を算出
+  2) 見つかった各案で1年（12か月。平日・休日、気象は月ごとの平年出現日数から抽選）をシミュレーションし、年間費用を算出
 使い方: python scripts/run_study.py [--reps 10] [--procs 4] [--districts 既存街区 新規街区] [--quick]
 """
 from __future__ import annotations
@@ -22,7 +22,7 @@ import pandas as pd
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from src.loaders import load_config, load_network, load_survey, resolve, survey_path  # noqa: E402
 from src.plan import demand_hourly, fleet_for, make_ops, optimal_layout  # noqa: E402
-from src.study import annual_cost, min_fleet, month_eval  # noqa: E402
+from src.study import annual_cost, min_fleet, year_eval  # noqa: E402
 
 G = {}
 
@@ -55,12 +55,15 @@ def run_one(args):
             rows.append({**base, "達成": False})
             continue
         F = fleet_for(L, r["自転車"], r["キックボード"], oh, rh, ops, seed=seed)
-        summ, daily = month_eval(L, F, cfg, {"平日": (oh, rh), "休日": (oh2, rh2)}, pattern=pattern,
-                                 substitution=sub, seed=seed)
+        ys, daily, bm = year_eval(L, F, cfg, {"平日": (oh, rh), "休日": (oh2, rh2)}, pattern=pattern,
+                                  substitution=sub, seed=seed)
+        summ = bm[bm["月"] == cfg["month"]["month"]].iloc[0].to_dict()      # 代表月（11月）
         cost = annual_cost(cfg, F, L.k, daily, cap)
         rows.append({**base, "達成": True, "自転車": r["自転車"], "キックボード": r["キックボード"], "合計台数": r["合計"],
                      "平日晴れ失敗率": r["失敗率"], "駅初期台数": int(F.init[L.k].sum()),
-                     **{f"月_{k}": v for k, v in summ.items() if not isinstance(v, list)},
+                     **{f"月_{k}": v for k, v in summ.items() if not isinstance(v, list) and k != "月"},
+                     **{f"年_{k}": v for k, v in ys.items() if not isinstance(v, list)},
+                     **{f"月別利用_{int(m)}": u for m, u in zip(bm["月"], bm["利用"])},
                      **{f"費用_{k}": v for k, v in cost.items()}, "所要秒": time.time() - t0})
     return rows
 
@@ -70,7 +73,7 @@ def main():
     ap.add_argument("--reps", type=int, default=10)
     ap.add_argument("--procs", type=int, default=4)
     ap.add_argument("--districts", nargs="*", default=None, help="対象街区（例：既存街区 新規街区）。省略で全街区")
-    ap.add_argument("--n-rep", type=int, default=40, help="最小台数探索で1条件あたりの日数")
+    ap.add_argument("--n-rep", type=int, default=60, help="最小台数探索で1条件あたりの最大日数（逐次判定で打ち切りあり）")
     ap.add_argument("--quick", action="store_true", help="動作確認用（条件を絞る）")
     a = ap.parse_args()
     cfg = load_config()

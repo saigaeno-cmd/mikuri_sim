@@ -93,7 +93,7 @@ def custom_layout(net: Network, cfg, ports: pd.DataFrame, shares, ebike_share: f
 
 
 def make_ops(cfg, *, weather="晴れ", pattern="a", substitution=None, ebike_share=None, procedure_sec=None,
-             walk_kmh=None, nightly_charge=None, station_buffer_q="cfg") -> Ops:
+             walk_kmh=None, nightly_charge=None, station_buffer_q="cfg", full_return=None) -> Ops:
     fm = cfg["fleet_mix"]
     es = fm["ebike_share"] if ebike_share is None else ebike_share
     w_eb, w_kb = get_weather(cfg, weather, "ebike"), get_weather(cfg, weather, "kickboard")
@@ -112,6 +112,8 @@ def make_ops(cfg, *, weather="晴れ", pattern="a", substitution=None, ebike_sha
         kb_range_km=b["range_km"], kb_swap_below=b["swap_below"], kb_out_hours=b["out_hours"],
         nightly_charge=b["nightly_charge"] if nightly_charge is None else nightly_charge,
         station_buffer_q=rb.get("station_buffer_q") if station_buffer_q == "cfg" else station_buffer_q,
+        full_return=rb.get("full_return", "outside") if full_return is None else full_return,
+        collect_delay_min=rb.get("collect_delay_min", 60),
     )
 
 

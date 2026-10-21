@@ -64,7 +64,7 @@ station_port:
   slot_width_m: 1.0
   slot_depth_m: 2.0
   max_slots: 25           # 駅ポート容量（基本25台＝区画①18台＋区画②1列7台）。画面で変更可
-  capacity_cases: {区画①のみ: 18, 基本: 25, 区画②も2列: 32}   # 感度分析用
+  capacity_cases: {区画①のみ: 18, 基本: 25, 区画②も2列: 32, 拡大案（仮）: 40}   # 感度分析用。40台は区画拡大の検討用の仮の値
   # 区画①：駅舎前の歩道沿い 約6m×19m → 1列 約18台／区画②：広場の角 約6.5m×7.5m → 通路1.5m＋2列 約14台（保守的に1列7台）
   # 寸法は航空写真からの推定（縮尺誤差 ±10%程度）
 
@@ -160,7 +160,7 @@ procedure_sec: 60         # 貸出・返却の手続き時間（秒/回）。感
 
 # 電動キックボードの充電による稼働停止（仮定値）
 battery:
-  kickboard: {range_km: 30, swap_below: 0.2, out_hours: 4, nightly_charge: false}
+  kickboard: {range_km: 30, swap_below: 0.2, out_hours: 4, nightly_charge: false, swap_work_min: 10}  # swap_work_min：交換1回の作業分（仮定、人件費に計上）
   ebike: {range_km: null}  # 電動アシスト自転車は電池切れによる停止を考慮しない
 
 # リバランス運用（軽トラック1台・作業員1名）
@@ -176,6 +176,15 @@ rebalance:
   extra_trip_min: 10      # 1回で運びきれない場合の往復1回ごと
   # b・c で駅に残す台数。null＝「夕方の期待需要＋1台」（指定どおり）。0.95 などにするとポアソン分布の95%点を残す
   station_buffer_q: null
+  # 満車で返せない車両の扱い：outside＝区画外に置き、次の作業（9:30／15:30／夜）で回収（基本）
+  #                          collect＝最初の返却失敗から collect_delay_min 分後に運営者が回収に出る（作業時間・軽トラック費を計上）
+  full_return: outside
+  collect_delay_min: 60
+
+# 利用者の行動
+behavior:
+  # 利用離れ：前日に借りられなかった割合 f に対し、翌日の利用希望を (1−α·f) 倍にする（仮定。0 で無効）
+  discourage_alpha: 0.5
 
 # 1か月シミュレーション
 month:

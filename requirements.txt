@@ -10,3 +10,4 @@ pyyaml>=6.0
 openpyxl>=3.1      # アンケート（xlsx）の読込
 osmnx>=2.0         # 道路網（geopandas・networkx を含む）。住宅 gpkg の読込にも使用
 networkx>=3.0
+ruamel.yaml>=0.18  # 設定ページで config.yaml をコメントを残したまま保存

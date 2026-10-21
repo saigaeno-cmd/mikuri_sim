@@ -206,6 +206,8 @@ def load_survey(path: Path, cfg: dict) -> pd.DataFrame:
         if not hour_cols:
             raise ValueError(f"アンケートCSV: 時間帯の列が見つかりません。実際の列: {list(raw.columns)}")
         probe = probe.melt(id_vars=id_cols, value_vars=hour_cols, var_name="hour", value_name="trips")
+    if "trips" not in probe.columns:          # 1行＝1回の外出（調査票ひな形の形式）
+        probe["trips"] = 1.0
     df = _rename(probe, aliases, ["hour", "trips"], "アンケートCSV")
     if "respondent_id" not in df.columns:
         df["respondent_id"] = np.arange(len(df))

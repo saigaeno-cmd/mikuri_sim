@@ -17,6 +17,7 @@
 """
 from __future__ import annotations
 
+import dataclasses
 import heapq
 import math
 from dataclasses import dataclass, field
@@ -65,6 +66,8 @@ class Ops:
     kb_out_hours: float = 4.0
     nightly_charge: bool = False
     station_buffer_q: float | None = None   # 駅に残す台数：None＝期待値＋1台、数値＝ポアソン分布のその分位点
+    full_return: str = "outside"            # 満車で返せないとき："outside"＝区画外に置き次の作業で回収／"collect"＝運営者が回収に出る
+    collect_delay_min: float = 60.0         # "collect" のとき、最初の返却失敗から回収するまでの分
 
 
 @dataclass
@@ -246,6 +249,22 @@ def _expected_after(arr24: np.ndarray, t_h: float) -> float:
     return float(arr24[h0] * (h0 + 1 - t_h) + arr24[h0 + 1:].sum())
 
 
+def _collect_outside(S: _State) -> list:
+    """区画外の車両を住宅側ポートの不足（初期配置との差）へ戻す。戻した台数 [自転車, キックボード]。"""
+    k = S.L.k
+    moved = [0, 0]
+    outside = [v for v in range(S.nv) if S.loc[v] == -2]
+    house_cnt = np.array([[len(S.at[j][t]) for t in (EB, KB)] for j in range(k)])
+    for v in outside:
+        t = S.vtype[v]
+        j = int(np.argmax(S.init_pt[:k, t] - house_cnt[:, t]))
+        S.loc[v] = -3
+        S.put(v, j)
+        house_cnt[j, t] += 1
+        moved[t] += 1
+    return moved
+
+
 def _rebalance(S: _State, st: DayStats, now: float, kind: str, out_h, ret_h, lam_scale):
     """kind: 'b'（9:30）/'c'（15:30）。区画外の車両もこの時に回収する。"""
     L, O = S.L, S.O
@@ -258,15 +277,8 @@ def _rebalance(S: _State, st: DayStats, now: float, kind: str, out_h, ret_h, lam
         moved[S.vtype[v]] += 1
 
     # 区画外の回収（住宅側の不足へ）
-    outside = [v for v in range(S.nv) if S.loc[v] == -2]
+    moved = _collect_outside(S)
     house_cnt = np.array([[len(S.at[j][t]) for t in (EB, KB)] for j in range(k)])
-    for v in outside:
-        t = S.vtype[v]
-        j = int(np.argmax(S.init_pt[:k, t] - house_cnt[:, t]))
-        S.loc[v] = -3
-        S.put(v, j)
-        house_cnt[j, t] += 1
-        moved[t] += 1
     t_h = now / 60.0
     ret_station = _expected_after(ret_h[:, STATION] * lam_scale, t_h) if O.trip_type[STATION] == "one_way" else 0.0
     if O.station_buffer_q is None:
@@ -354,6 +366,7 @@ def simulate_day(layout: Layout, fleet: Fleet, ops: Ops, out_h: np.ndarray, ret_
     L, O = layout, ops
     S = state if state is not None else _State(L, fleet, O, rng)
     S.init_pt = fleet.init.copy()
+    S.collect_pending = False
     # 前日からの充電待ちは時刻を1日分進める
     S.ready_at = np.maximum(S.ready_at - 24 * 60, 0)
     st = DayStats(port_fail=np.zeros(L.k + 2))
@@ -372,18 +385,22 @@ def simulate_day(layout: Layout, fleet: Fleet, ops: Ops, out_h: np.ndarray, ret_
         heapq.heappush(ev, (t, prio, seq, item))
         seq += 1
 
-    # 利用希望の発生
+    # 利用希望の発生（ポアソン。発生したマスだけをまとめて時刻に展開する）
+    def gen(kind, lam, d, t):
+        cnt = rng.poisson(lam)
+        jj, hh = np.nonzero(cnt)
+        if not len(jj):
+            return
+        n = cnt[jj, hh]
+        x = np.repeat(hh, n) * 60 + rng.random(int(n.sum())) * 60
+        for xi, ji in zip(x.tolist(), np.repeat(jj, n).tolist()):
+            push(xi, _REQ, (kind, ji, d, t))
+
     for d in (STATION, AEON):
         for t in (EB, KB):
-            lam = np.outer(L.share, out_h[:, d] * lam_t[t])                  # (k, 24)
-            for (j, h), n in np.ndenumerate(rng.poisson(lam)):
-                for x in h * 60 + rng.random(n) * 60:
-                    push(float(x), _REQ, ("out", int(j), d, t))
+            gen("out", np.outer(L.share, out_h[:, d] * lam_t[t]), d, t)                 # (k, 24)
             if O.trip_type[d] == "one_way":
-                lamr = np.outer(L.share, ret_h[:, d] * lam_t[t])
-                for (j, h), n in np.ndenumerate(rng.poisson(lamr)):
-                    for x in h * 60 + rng.random(n) * 60:
-                        push(float(x), _REQ, ("ret", int(j), d, t))
+                gen("ret", np.outer(L.share, ret_h[:, d] * lam_t[t]), d, t)
     if O.pattern in ("b", "c"):
         push(O.reb_times[0] * 60, _REB, ("reb", "b"))
     if O.pattern == "c":
@@ -406,6 +423,9 @@ def simulate_day(layout: Layout, fleet: Fleet, ops: Ops, out_h: np.ndarray, ret_
             st.swaps += 1
         if S.count(p) >= L.caps[p]:
             S.loc[v] = -2
+            if O.full_return == "collect" and not S.collect_pending:
+                S.collect_pending = True
+                push(now + O.collect_delay_min, _REB, ("col",))
             st.return_fail += 1
             st.port_fail[p] += 1
             st.hourly[min(int(now // 60), 23), 3] += 1
@@ -421,6 +441,15 @@ def simulate_day(layout: Layout, fleet: Fleet, ops: Ops, out_h: np.ndarray, ret_
         if kind == "arr":
             _, v, p, km = item
             arrive(v, p, now, km)
+            continue
+        if kind == "col":                       # 運営者による回収（満車で返せなかった車両）
+            moved = _collect_outside(S)
+            S.collect_pending = False
+            minutes, trips = _truck(O, moved[EB], moved[KB])
+            if minutes > 0:
+                st.ops.append((now / 60.0, sum(moved), minutes, trips))
+            for p in range(L.k + 2):
+                st.port_peak[p] = max(st.port_peak[p], S.count(p))
             continue
         if kind == "reb":
             _rebalance(S, st, now, item[1], out_h, ret_h, lam_scale)
@@ -521,8 +550,8 @@ def summarize(days: list[DayStats], fleet: Fleet) -> dict:
 
 def simulate_days(layout, fleet, ops, out_h, ret_h, n_rep=100, seed=0) -> dict:
     """同じ条件の1日を n_rep 回（独立）。最小台数の探索に使う。"""
-    rng = np.random.default_rng(seed)
-    days = [simulate_day(layout, fleet, ops, out_h, ret_h, rng)[0] for _ in range(n_rep)]
+    # 日 i の乱数は [seed, i] で決める（最小台数の逐次判定と同じ乱数列になる）
+    days = [simulate_day(layout, fleet, ops, out_h, ret_h, np.random.default_rng([seed, i]))[0] for i in range(n_rep)]
     return summarize(days, fleet)
 
 
@@ -556,16 +585,24 @@ def month_calendar(year: int, month: int, holidays, climate_row: dict, rng) -> p
     return pd.DataFrame(rows, columns=["日付", "曜日区分", "気象"])
 
 
-def simulate_month(layout: Layout, fleet: Fleet, ops_for, demand_for, cal: pd.DataFrame, seed: int = 0):
-    """ops_for(気象)->Ops、demand_for(曜日区分, 気象)->(out_h, ret_h)。電池・充電状態は日をまたいで引き継ぐ。"""
+def simulate_month(layout: Layout, fleet: Fleet, ops_for, demand_for, cal: pd.DataFrame, seed: int = 0,
+                   discourage: float = 0.0, state=None, mult0: float = 1.0):
+    """ops_for(気象)->Ops、demand_for(曜日区分, 気象)->(out_h, ret_h)。電池・充電状態は日をまたいで引き継ぐ。
+    discourage：利用離れの強さ α。前日に借りられなかった割合 f に対し、翌日の利用希望を (1−α·f) 倍にする。"""
     rng = np.random.default_rng(seed)
-    state, days, rows = None, [], []
+    days, rows = [], []
+    mult = mult0
     for r in cal.itertuples(index=False):
         ops = ops_for(r.気象)
+        if mult < 1.0:
+            ops = dataclasses.replace(ops, demand_mult=tuple(x * mult for x in ops.demand_mult))
         out_h, ret_h = demand_for(r.曜日区分, r.気象)
         st, state = simulate_day(layout, fleet, ops, out_h, ret_h, rng, state)
         days.append(st)
         one = summarize([st], fleet)
-        rows.append({"日付": r.日付, "曜日区分": r.曜日区分, "気象": r.気象, **one})
+        rows.append({"日付": r.日付, "曜日区分": r.曜日区分, "気象": r.気象, "需要の倍率（利用離れ）": mult, **one})
+        req = st.req_out + st.req_ret
+        if discourage > 0 and req > 0:
+            mult = max(0.0, 1.0 - discourage * (st.fail_out + st.fail_ret) / req)
     daily = pd.DataFrame(rows)
     return summarize(days, fleet), daily, days

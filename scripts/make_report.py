@@ -26,7 +26,7 @@ ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 from src.loaders import load_config, load_network, load_survey, resolve, survey_path  # noqa: E402
 from src.plan import demand_hourly, fleet_for, make_ops, optimal_layout  # noqa: E402
-from src.study import annual_cost, month_eval  # noqa: E402
+from src.study import annual_cost, year_eval  # noqa: E402
 
 _add_series = CategoryChartData.add_series
 
@@ -270,6 +270,9 @@ def chart_title(ch, text, size=14):
 
 def box_chart(slide, x, y, w, h, cats, stats, title, fmt="0", colors=(LIGHT, NAVY, TEAL, LIGHT), size=12):
     """箱ひげ（積み上げ棒で表現）：最小（透明）・最小→25%・25%→中央値・中央値→75%・75%→最大。"""
+    if not len(stats):
+        tb(slide, x, y + h / 2 - 0.3, w, 0.6, f"{title}：該当する結果なし", size=12, color=MUTED, align=PP_ALIGN.CENTER)
+        return None
     cd = CategoryChartData()
     cd.categories = cats
     st = np.array(stats, dtype=float)   # (n, 5) min q1 med q3 max
@@ -368,7 +371,10 @@ def main():
     out_dir = resolve(cfg["paths"].get("output_dir", "data/output")) / "study"
     d = load_results(out_dir)
     sens = pd.read_csv(out_dir / "sensitivity.csv") if (out_dir / "sensitivity.csv").exists() else None
+    sens_reps = sens["回"].nunique() if sens is not None and "回" in sens else 1
     buf = pd.read_csv(out_dir / "rebalance_buffer_test.csv") if (out_dir / "rebalance_buffer_test.csv").exists() else None
+    frt = pd.read_csv(out_dir / "full_return_test.csv") if (out_dir / "full_return_test.csv").exists() else None
+    dis = pd.read_csv(out_dir / "discourage_test.csv") if (out_dir / "discourage_test.csv").exists() else None
     meta_p = out_dir / "meta.json"
     districts = json.loads(meta_p.read_text(encoding="utf-8")).get("districts") if meta_p.exists() else None
     net = load_network(cfg).subset(districts)
@@ -436,7 +442,7 @@ def main():
            if not np.isnan(med_fleet(sc, "なし(i)")) and not np.isnan(med_fleet(sc, "あり(ii)"))]
 
     # ---- 推奨案の配置・1か月（低位・高位）
-    lay, month = {}, {}
+    lay, month, year = {}, {}, {}
     for scen in (lo_s, hi_s):
         conv = cfg["demand_scenarios"][scen]
         oh, rh, sh = demand_hourly(sv, cfg, conv, P, "平日")
@@ -448,11 +454,13 @@ def main():
         if r:
             ops = make_ops(cfg, pattern=r["pattern"], substitution=cfg["fleet_mix"]["substitution"])
             F = fleet_for(L, r["nb"], r["nk"], oh, rh, ops)
-            summ, daily = month_eval(L, F, cfg, {"平日": (oh, rh), "休日": (oh2, rh2)}, pattern=r["pattern"],
-                                     substitution=cfg["fleet_mix"]["substitution"], seed=1)
-            cost = annual_cost(cfg, F, L.k, daily, cap_s)
+            ys, ydaily, bm = year_eval(L, F, cfg, {"平日": (oh, rh), "休日": (oh2, rh2)}, pattern=r["pattern"],
+                                       substitution=cfg["fleet_mix"]["substitution"], seed=1)
+            cost = annual_cost(cfg, F, L.k, ydaily, cap_s)
             r["init"] = F.init
-            month[scen] = (summ, daily, cost)
+            mo = cfg["month"]["month"]
+            month[scen] = (bm[bm["月"] == mo].iloc[0].to_dict(), ydaily[ydaily["月"] == mo], cost)
+            year[scen] = (ys, bm, ydaily)
     png = out_dir / "_map.png"
     port_map_png(net, cfg, lay[lo_s][1], lay[lo_s][2], png)
 
@@ -619,9 +627,10 @@ def main():
           col_w=[1.8, 2.6, 2.6, 2.6], size=13, row_h=0.62)
     tb(s, 1.15, 6.4, 9.6, 3.6, [
         "表記：自転車＋キックボード＝合計（中央値）",
-        f"失敗率1%は5%の約{min(r15):.1f}〜{max(r15):.1f}倍の台数が要る。"
+        (f"失敗率1%は5%の約{min(r15):.1f}〜{max(r15):.1f}倍の台数が要る。" if r15 else "")
         + (f"{'・'.join(miss1)}では1%を半数以上の回で達成できない（探索範囲内）。" if miss1 else ""),
-        (f"代替乗車なし(i)と比べ、失敗率5%の台数は{min(red):.0%}〜{max(red):.0%}少ない（混在フリートのページ）。" if SUB.startswith("あり")
+        ("" if not red else
+         f"代替乗車なし(i)と比べ、失敗率5%の台数は{min(red):.0%}〜{max(red):.0%}少ない（混在フリートのページ）。" if SUB.startswith("あり")
          else f"代替乗車あり(ii)にすると、失敗率5%の台数は{min(red):.0%}〜{max(red):.0%}少なくなる（混在フリートのページ）。"),
         f"需要が多いほど駅ポート{base_cap}台が満車になりやすく、台数が急増する（駅ポート容量のページ）。"],
        size=14, space_after=8)
@@ -714,7 +723,8 @@ def main():
     tb(s, 11.4, 5.2, 7.2, 1.0, f"範囲 {sub_rate.min():.1%}〜{sub_rate.max():.1%}（全条件・全回）", size=14, color=MUTED)
     tb(s, 11.1, 6.7, 7.75, 3.4, [
         "車種の比率は調査Q16（自転車60.3%・キックボード39.7%）。利用者ごとに希望車種を割り当て、往復は同じ車種を希望。",
-        f"代替を認めると、失敗率5%の台数を{min(red):.0%}〜{max(red):.0%}減らせる（需要が多いほど効果大）。代替乗車率は数%程度。",
+        (f"代替を認めると、失敗率5%の台数を{min(red):.0%}〜{max(red):.0%}減らせる（需要が多いほど効果大）。代替乗車率は数%程度。"
+         if red else "代替乗車率は数%程度。"),
         "代替乗車を基本とする（他の車種があれば乗り、無ければ徒歩）。アプリ・利用規約で他車種への乗り換えを案内する仕組みが要る。"], size=14, space_after=8)
 
     # 9 駅ポート容量
@@ -795,6 +805,43 @@ def main():
         "運用aを推奨。今回の全条件（需要4種×容量3種×代替2種）で、b・cがaより台数・費用を減らした条件は無い。",
         "軽トラック：キックボード8台・自転車4台/往復、作業30分＋3分/台＋10分/追加往復。"], size=14, space_after=8)
 
+    # 10b 運用ルールの追加検証（満車時の扱い・利用離れ）
+    if frt is not None or dis is not None:
+        s = frame("運用ルールの追加検証", "Operating Rules", f"満車時の扱いと利用離れ（失敗率5%・{SUBTXT}・運用a、各3回の中央値）")
+        if frt is not None:
+            f2 = frt.copy()
+            f2["需要シナリオ"] = f2["需要シナリオ"].map(short_scen)
+            f2["満車時の扱い"] = f2["満車時の扱い"].map({"outside": "区画外→次の作業で回収", "collect": "運営者が回収に出る"})
+            f2["合計台数"] = f2["合計台数"].map(lambda v: "未達" if pd.isna(v) else f"{v:.0f}台")
+            f2["返却失敗率"] = f2["返却失敗率"].map(lambda v: "—" if pd.isna(v) else f"{v:.1%}")
+            f2["作業回数/日"] = f2["作業回数/日"].map(lambda v: "—" if pd.isna(v) else f"{v:.1f}")
+            f2["年間総費用"] = f2["年間総費用"].map(lambda v: "—" if pd.isna(v) else f"{v / 1e4:,.0f}万円")
+            f2["駅ポート容量"] = f2["駅ポート容量"].map(lambda v: f"{v:.0f}台")
+            f2 = f2[["需要シナリオ", "駅ポート容量", "満車時の扱い", "合計台数", "返却失敗率", "作業回数/日", "年間総費用"]]
+            tb(s, 1.15, 2.95, 11.0, 0.4, ("満車で返せない車両の扱い", {"bold": True, "color": NAVY, "size": 16}))
+            table(s, 1.15, 3.45, 11.0, f2.rename(columns={"需要シナリオ": "需要", "駅ポート容量": "駅容量", "作業回数/日": "作業回/日"}),
+                  col_w=[1.0, 1.1, 3.0, 1.3, 1.4, 1.3, 1.9], size=10, row_h=0.36,
+                  highlight=lambda i: f2.iloc[i]["満車時の扱い"].startswith("運営者"))
+        if dis is not None:
+            d2 = dis.copy()
+            d2["需要シナリオ"] = d2["需要シナリオ"].map(short_scen)
+            d2 = d2[["需要シナリオ", "α", "利用希望/日", "充足率", "1トリップあたり費用"]]
+            d2["利用希望/日"] = d2["利用希望/日"].map(lambda v: f"{v:.1f}")
+            d2["充足率"] = d2["充足率"].map(lambda v: f"{v:.1%}")
+            d2["1トリップあたり費用"] = d2["1トリップあたり費用"].map(lambda v: f"{v:,.0f}円")
+            tb(s, 12.5, 2.95, 6.35, 0.4, ("利用離れの強さ α（1年）", {"bold": True, "color": NAVY, "size": 16}))
+            table(s, 12.5, 3.45, 6.35, d2.rename(columns={"需要シナリオ": "需要", "1トリップあたり費用": "1回あたり費用"}),
+                  col_w=[0.9, 0.7, 1.5, 1.4, 1.85], size=10, row_h=0.36)
+            tb(s, 12.5, 6.2, 6.35, 3.8, [
+                "α＝前日に借りられなかった割合に対する翌日の利用希望の減り方（仮定）。0は利用離れなし。",
+                "台数は「平日・晴れの1日」で決めるため変わらない。年間の利用回数と1回あたり費用に効く。",
+                "実証の利用記録で、失敗の翌日に利用が減るかを確かめて値を決める。"], size=13, space_after=6)
+        if frt is not None:
+            col = frt.groupby("満車時の扱い")["年間総費用"].median()
+            tb(s, 1.15, 9.0, 11.0, 1.3, [
+                "運営者が回収に出ると返却失敗の車両を早く戻せるため、満車になる条件（高位・駅容量小）で台数が減る。その分、日中の作業が増える。",
+                "満車にならない条件では差がない。"], size=13, space_after=6)
+
     # 11 1か月の推移（推奨案）
     s = frame("1か月シミュレーション（推奨案）", "One-Month Simulation",
               f"{cfg['month']['year']}年{cfg['month']['month']}月：平日・休日（土日祝）・気象（平年の出現日数から抽選）")
@@ -821,17 +868,50 @@ def main():
             f"休日{len(hol)}日・雨{len(rain)}日。休日・雨の日は利用希望が少なく、平日晴れが台数を決める。",
             f"稼働率 {summ['稼働率(回/台/日)']:.2f}回/台/日"], size=13, space_after=4)
 
+    # 11b 季節による変化（1年）
+    if year:
+        s = frame("季節による変化（1年）", "Seasonal Variation",
+                  "12か月を連続で計算（月ごとの曜日・祝日・平年の気象）。年間費用はこの1年分から算出")
+        cd = CategoryChartData()
+        cd.categories = [f"{m}月" for m in range(1, 13)]
+        for scen in (lo_s, hi_s):
+            if scen in year:
+                bm = year[scen][1].set_index("月")
+                cd.add_series(f"{short_scen(scen)}：利用（回/日）", [float(bm.loc[m, "利用"]) for m in range(1, 13)])
+        ch = s.shapes.add_chart(XL_CHART_TYPE.COLUMN_CLUSTERED, Inches(1.15), Inches(3.0), Inches(11.0), Inches(7.0), cd).chart
+        style_chart(ch)
+        color_series(ch, [NAVY, TEAL])
+        ch.plots[0].gap_width = 60
+        chart_title(ch, "月別の1日あたり利用回数（推奨案）")
+        zero_axis(ch)
+        lines = [("年間の結果", {"bold": True, "color": NAVY, "size": 18})]
+        for scen in (lo_s, hi_s):
+            if scen not in year:
+                continue
+            ys, bm, yd = year[scen]
+            lo_m = bm.loc[bm["利用"].idxmin(), "月"]
+            hi_m = bm.loc[bm["利用"].idxmax(), "月"]
+            lines.append(f"{short_scen(scen)}：年間{yd['利用'].sum():,.0f}回・充足率{ys['充足率']:.1%}。"
+                         f"最少{int(lo_m)}月・最多{int(hi_m)}月（差{bm['利用'].max() / bm['利用'].min() - 1:.0%}）。")
+        alpha = (cfg.get("behavior") or {}).get("discourage_alpha", 0)
+        if alpha and lo_s in year:
+            m_avg = year[lo_s][2]["需要の倍率（利用離れ）"].mean()
+            lines.append((f"利用離れ（α={alpha}、仮定）による利用希望の減少：年平均{1 - m_avg:.1%}（低位）。", {"size": 13, "color": MUTED}))
+        lines.append(("梅雨・夏（雨・猛暑）と冬（寒冷）は利用が減る。台数は平日・晴れの日で決まるため、季節で台数は変えない前提。",
+                      {"size": 13, "color": MUTED}))
+        tb(s, 12.6, 3.0, 6.25, 7.2, lines, size=14, space_after=10)
+
     # 12 費用
     s = frame("年間費用と他事例との比較", "Annual Cost & Benchmarks", f"推奨案（失敗率5%・{SUBTXT}・運用a、駅ポートは費用が最小の容量）")
-    items = ["車両（償却）", "車両維持", "ポート（償却）", "用地", "人件費（リバランス）", "軽トラック"]
+    items = ["車両（償却）", "車両維持", "ポート（償却）", "用地", "人件費（リバランス）", "軽トラック", "人件費（電池交換）"]
     cd = CategoryChartData()
     cd.categories = [short_scen(sc) for sc in scens if rec.get(sc)]
     for it in items:
-        cd.add_series(it, [float(rec[sc]["rows"][f"費用_{it}"].median() / 1e4) for sc in scens if rec.get(sc)],
+        cd.add_series(it, [float(rec[sc]["rows"].get(f"費用_{it}", pd.Series([0.0])).median() / 1e4) for sc in scens if rec.get(sc)],
                       number_format="#,##0")
     ch = s.shapes.add_chart(XL_CHART_TYPE.BAR_STACKED, Inches(1.15), Inches(3.0), Inches(9.3), Inches(5.0), cd).chart
     style_chart(ch, size=12)
-    color_series(ch, [NAVY, MID, TEAL, LIGHT, PURPLE, "C9CFDC"])
+    color_series(ch, [NAVY, MID, TEAL, LIGHT, PURPLE, "C9CFDC", "E07A1F"])
     ch.plots[0].gap_width = 50
     ch.plots[0].has_data_labels = True
     ch.plots[0].data_labels.position = XL_LABEL_POSITION.CENTER
@@ -861,6 +941,14 @@ def main():
     # 13〜15 感度分析
     if sens is not None and len(sens):
         sens = sens.copy()
+        if "回" in sens:                       # 各点 reps 回の中央値（過半数の回で達成したときだけ達成とみなす）
+            sens["達成"] = sens["達成"].astype(bool)
+            g = sens.groupby(["項目", "値", "運用"])
+            agg = g[["自転車", "キックボード", "合計台数", "年間総費用"]].median()
+            agg["達成"] = g["達成"].mean() >= 0.5
+            sens = agg.reset_index()
+            for c_ in ("自転車", "キックボード", "合計台数"):
+                sens[c_] = sens[c_].round()
         sens["達成"] = sens["達成"].astype(bool)
         sv_a = sens[(sens["運用"] == "a") & sens["達成"]]
         base_d = round((cfg["demand_scenarios"][lo_s] + cfg["demand_scenarios"][hi_s]) / 2, 4)
@@ -933,7 +1021,7 @@ def main():
             "駅ポートが満車になると返却失敗で台数が急増する。",
             "需要は暫定値のため、東京都資料での確定が最優先。",
             "手続き時間・歩行速度・自転車比率の影響は小さい。",
-            ("各点1回の計算のため、±2台程度は乱数の揺れを含む。", {"size": 12, "color": MUTED})], size=14, space_after=10)
+            (f"各点{int(sens_reps)}回計算した中央値。", {"size": 12, "color": MUTED})], size=14, space_after=10)
 
         s = frame("感度分析②：年間費用", "Sensitivity: Annual Cost", "各点で費用が最小の運用を選んだときの年間総費用の増減")
         tornado(s, 1.15, 3.0, 11.2, 7.3, "年間総費用", base_cost,

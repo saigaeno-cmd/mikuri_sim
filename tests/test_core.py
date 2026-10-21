@@ -6,7 +6,7 @@ import pytest
 
 from src.demand import build_demand, hourly_matrix
 from src.fleet import simulate_fleet
-from src.loaders import load_config
+from src.loaders import ROOT, load_config
 from src.location import solve_pmedian
 
 CFG = load_config()
@@ -343,3 +343,73 @@ def test_rebalance_b_station_buffer():
     moved, at_station = res[None]
     assert moved == at_station - (6 + 1)
     assert res[0.95][0] == at_station - 10                      # ポアソン(6)の95%点＝10台を残す
+
+
+def test_full_return_collect():
+    """満車で返せない車両：outside は夜まで区画外、collect は回収作業が記録され住宅側へ戻る。"""
+    out, ret = _dem(10.0, 8.0)
+    f = _F((20, 0))
+    st_o, S_o = simulate_day(_L(station_cap=3), f, _O(), out, ret, np.random.default_rng(3))
+    st_c, S_c = simulate_day(_L(station_cap=3), f, _O(full_return="collect", collect_delay_min=30), out, ret,
+                             np.random.default_rng(3))
+    assert st_o.return_fail > 0 and st_c.return_fail == st_o.return_fail
+    day_ops = [o for o in st_c.ops if o[0] < 24]
+    assert day_ops and day_ops[0][1] >= 1                    # 日中に回収作業がある
+    assert not [o for o in st_o.ops if o[0] < 24]            # outside は日中の作業なし
+
+
+def test_discourage_lowers_next_day_demand():
+    from src.engine import month_calendar, simulate_month
+    out, ret = _dem(20.0, 0.0)
+    cal = month_calendar(2026, 11, CFG["month"]["holidays_2026"], CFG["climate"][11], np.random.default_rng(0))
+    cal["曜日区分"], cal["気象"] = "平日", "晴れ"
+    ops = _O()
+    f = _F((5, 0))                                           # 台数が足りず失敗が多い
+    s0, d0, _ = simulate_month(_L(), f, lambda w: ops, lambda dt, w: (out, ret), cal, seed=1, discourage=0.0)
+    s1, d1, _ = simulate_month(_L(), f, lambda w: ops, lambda dt, w: (out, ret), cal, seed=1, discourage=1.0)
+    assert (d0["需要の倍率（利用離れ）"] == 1).all() and d1["需要の倍率（利用離れ）"].iloc[1:].mean() < 0.95
+    assert s1["利用希望"] < s0["利用希望"]
+
+
+def test_year_eval_and_cost():
+    from src.plan import demand_hourly, fleet_for, make_ops, optimal_layout
+    from src.study import annual_cost, year_eval
+    from src.loaders import load_survey, survey_path
+    net = _real_net()
+    c = {**CFG, "simulation": {**CFG["simulation"], "n_households": len(net.houses)}}
+    sv = load_survey(survey_path(c)[0], c)
+    P = c["survey_xlsx"]["default_modes"]
+    oh, rh, sh = demand_hourly(sv, c, 0.12, P, "平日")
+    oh2, rh2, _ = demand_hourly(sv, c, 0.12, P, "休日")
+    L, _, _ = optimal_layout(net, c, sh, 3, 0.603)
+    F = fleet_for(L, 12, 8, oh, rh, make_ops(c))
+    summ, daily, by_month = year_eval(L, F, c, {"平日": (oh, rh), "休日": (oh2, rh2)}, seed=0)
+    assert len(daily) == 365 and len(by_month) == 12
+    assert by_month["利用希望"].std() > 0                      # 月ごとに曜日・気象が違う
+    cost = annual_cost(c, F, L.k, daily, 25)
+    assert cost["人件費（電池交換）"] >= 0 and abs(cost["年間利用回数"] - daily["利用"].sum()) < 1e-6
+    assert cost["年間総費用"] == pytest.approx(sum(cost[k] for k in ("車両（償却）", "車両維持", "ポート（償却）", "用地",
+                                                                "人件費（リバランス）", "軽トラック", "人件費（電池交換）")))
+
+
+def test_import_usage_log_and_survey_template():
+    import importlib.util
+    spec = importlib.util.spec_from_file_location("iul", ROOT / "scripts" / "import_usage_log.py")
+    iul = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(iul)
+    log = pd.read_csv(ROOT / "data" / "templates" / "usage_log_template.csv")
+    r = iul.analyze(log, CFG, CFG["month"]["holidays_2026"])
+    assert r["days"] == {"平日": 1, "休日": 1}                     # 11/3 は文化の日
+    assert r["trips_per_day"]["平日"] == 2 and abs(r["ebike_share_obs"] - 1 / 3) < 1e-9
+    h = r["hourly"]
+    assert set(h["方向"]) == {"往路", "復路"} and set(h["目的地"]) == {"station", "aeon"}
+    # 調査票ひな形（1行＝1回の外出）をそのまま読める
+    from src.loaders import load_survey
+    sv = pd.read_excel(ROOT / "data" / "templates" / "survey_template.xlsx", sheet_name="回答")
+    p = ROOT / "data" / "templates" / "_tmp_survey.csv"
+    sv.to_csv(p, index=False)
+    try:
+        s = load_survey(p, CFG)
+    finally:
+        p.unlink()
+    assert list(s["destination"]) == ["station", "aeon", "other"] and (s["trips"] == 1).all()
