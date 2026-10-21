@@ -386,6 +386,7 @@ def main():
     P = cfg["survey_xlsx"]["default_modes"]
     scens = list(cfg["demand_scenarios"])
     caps = list(cfg["station_port"]["capacity_cases"].values())
+    cap_name = {v: k for k, v in cfg["station_port"]["capacity_cases"].items()}
     base_cap = cfg["station_port"]["max_slots"]
     reps = int(d["回"].nunique())
     n_cond = d.groupby(["需要シナリオ", "代替乗車", "運用", "駅ポート容量"]).ngroups
@@ -430,6 +431,22 @@ def main():
                          reb=x["費用_運営費に占める再配置費用"].median(), slots=int(x["費用_区画数"].median()),
                          rows=x)
     lo_s, hi_s = scens[0], scens[1]
+
+    # b・c が a より台数・費用で有利な条件があるか（目標5%、中央値）
+    _x = d[(d["目標失敗率"] == 0.05) & d["達成"]]
+    _g = _x.groupby(["需要シナリオ", "代替乗車", "駅ポート容量", "運用"])[["合計台数", "費用_年間総費用"]].median().unstack("運用")
+    better = []
+    for idx, r_ in _g.iterrows():
+        for pat in ("b", "c"):
+            try:
+                if r_[("合計台数", pat)] < r_[("合計台数", "a")] or r_[("費用_年間総費用", pat)] < r_[("費用_年間総費用", "a")]:
+                    better.append(f"{short_scen(idx[0])}・{idx[1]}・駅{idx[2]}台の{pat}")
+            except KeyError:
+                pass
+    bc_note = (f"運用aを推奨。今回の全条件（需要{len(scens)}種×容量{len(caps)}種×代替2種）で、b・cがaより台数・費用を減らした条件は無い。"
+               if not better else
+               f"多くの条件で運用aが有利。ただし {'、'.join(better[:4])}{' ほか' if len(better) > 4 else ''} ではb・cが台数か費用でaを下回る。")
+
 
     def med_fleet(scen, sub=SUB, pat="a", cap=base_cap, tgt=0.05):
         x = sel(scen, sub, pat, cap, tgt)
@@ -516,7 +533,7 @@ def main():
     put(by_id(s, 30), "運用a（夜1回の再配置）")
     put(by_id(s, 26), [f"低位：駅{rl['cap']}台・年間{yen_man(rl['cost'])}" if rl else "低位：—",
                        f"高位：駅{rh_['cap']}台・年間{yen_man(rh_['cost'])}" if rh_ else "高位：—",
-                       "日中の再配置（b・c）は台数・費用とも増える。"])
+                       "日中の再配置（b・c）は台数・費用とも増える。" if not better else "日中の再配置（b・c）は一部の条件でのみ有利。"])
 
     # 3 推奨案の文章＋地図
     s = frame("推奨案の内容", "Recommended Plan", "住宅側ポート・台数・駅ポート・運用・費用")
@@ -597,7 +614,7 @@ def main():
     rows = [("需要シナリオ", "低位・高位（暫定）／旧シナリオ転換率10%・30%"),
             ("代替乗車", "(i) 希望車種が無ければ徒歩／(ii) 他の車種があれば乗り、無ければ徒歩（基本は(ii)）"),
             ("リバランス", "a 夜1回／b a＋9:30 駅の余剰を戻す／c b＋15:30 住宅側と駅をそろえる"),
-            ("駅ポート容量", "18台（区画①のみ）・25台（基本）・32台（区画②も2列）"),
+            ("駅ポート容量", "・".join(f"{v}台（{k}）" for k, v in cfg["station_port"]["capacity_cases"].items())),
             ("目標", "貸出失敗率 20%（充足率80%）・5%・1% それぞれの最小台数"),
             ("1回の計算", f"①平日・晴れの1日×{40}回で最小台数を探索 → ②その台数で1か月（平日・休日・気象）→ ③年間費用"),
             ("前提", f"住宅{n_h}戸（{dist_txt}）・駅は片道・イオンは往復・キックボードは電池交換で4時間停止")]
@@ -676,7 +693,7 @@ def main():
     tb(s, 1.15, 9.5, 17.7, 0.9, "運用a・駅ポート25台。(i) 代替乗車なし／(ii) あり。幅は需要の偶然の揺れによるもので、計画台数は上側（75%点〜最大）を見て決めると安全。",
        size=14, color=MUTED)
 
-    # 7 ばらつき：1か月の結果（全72条件）
+    # 7 ばらつき：1か月の結果（全条件）
     s = frame("結果のばらつき②：1か月の運用", "Variability: One-Month Simulation",
               "失敗率5%の台数で1か月（平日・休日・気象）を回した結果（全条件・全回）")
     x5 = d[(d["目標失敗率"] == 0.05) & d["達成"]]
@@ -728,7 +745,7 @@ def main():
         "代替乗車を基本とする（他の車種があれば乗り、無ければ徒歩）。アプリ・利用規約で他車種への乗り換えを案内する仕組みが要る。"], size=14, space_after=8)
 
     # 9 駅ポート容量
-    s = frame("駅ポートの容量（18・25・32台）", "Station Port Capacity", "満車で返却できない「返却失敗」と必要台数への影響")
+    s = frame(f"駅ポートの容量（{'・'.join(str(c) for c in caps)}台）", "Station Port Capacity", "満車で返却できない「返却失敗」と必要台数への影響")
     cd = CategoryChartData()
     cd.categories = [short_scen(x) for x in scens]
     for cap in caps:
@@ -740,7 +757,7 @@ def main():
         cd.add_series(f"{cap}台", vals)
     ch = s.shapes.add_chart(XL_CHART_TYPE.COLUMN_CLUSTERED, Inches(1.15), Inches(3.0), Inches(8.7), Inches(6.2), cd).chart
     style_chart(ch)
-    color_series(ch, [LIGHT, NAVY, TEAL])
+    color_series(ch, [LIGHT, NAVY, TEAL, PURPLE])
     ch.plots[0].has_data_labels = True
     ch.plots[0].data_labels.position = XL_LABEL_POSITION.OUTSIDE_END
     ch.plots[0].data_labels.font.size = Pt(11)
@@ -755,7 +772,7 @@ def main():
             rr.append(f"{ok['月_返却失敗率'].median():.1%}／{ok['月_駅ポート最大在庫'].median():.0f}台" if len(ok) else "—")
         rows.append(rr)
     table(s, 10.2, 3.1, 8.65, pd.DataFrame(rows, columns=["需要"] + [f"容量{c}台" for c in caps]),
-          col_w=[1.7, 2.3, 2.3, 2.35], size=12, row_h=0.6)
+          col_w=[1.5] + [7.15 / len(caps)] * len(caps), size=11 if len(caps) > 3 else 12, row_h=0.6)
     hi32 = sel(hi_s, cap=max(caps))
     hi_rf = hi32[hi32["達成"]]["月_返却失敗率"].median() if len(hi32) else np.nan
     cap_note = (f"低位なら{rec[lo_s]['cap'] if rec.get(lo_s) else base_cap}台で足りる。高位では{max(caps)}台にすると台数・費用とも下がる"
@@ -802,7 +819,7 @@ def main():
         table(s, 12.5, 7.6, 6.35, bb.rename(columns={"需要シナリオ": "需要", "駅に残す台数の基準": "駅に残す基準", "合計台数": "台数"}),
               col_w=[0.9, 0.7, 3.75, 1.0], size=10, row_h=0.32)
     tb(s, 1.15, 3.1 + 0.55 * (len(rows) + 1) + 0.4, 11.0, 2.6, [
-        "運用aを推奨。今回の全条件（需要4種×容量3種×代替2種）で、b・cがaより台数・費用を減らした条件は無い。",
+        bc_note,
         "軽トラック：キックボード8台・自転車4台/往復、作業30分＋3分/台＋10分/追加往復。"], size=14, space_after=8)
 
     # 10b 運用ルールの追加検証（満車時の扱い・利用離れ）
@@ -1123,8 +1140,9 @@ def main():
     put(by_id(s, 18), [
         f"住宅側ポート3か所・運用a（夜1回の再配置）を推奨（{SUBTXT}：他の車種があれば乗り、無ければ徒歩）。失敗率5%で、低位需要は{fl(rl)}・駅ポート{rl['cap']}台、"
         f"高位需要は{fl(rh_)}・駅ポート{rh_['cap']}台。",
-        "日中のリバランス（b・c）は台数・費用を増やすだけで効果が無い。駅ポートが満車になると返却失敗で台数が急増するため、"
-        "需要が高位に近ければ区画②を2列（32台）にする。",
+        ("日中のリバランス（b・c）は台数・費用を増やすだけで効果が無い。" if not better else "日中のリバランス（b・c）が有利なのは一部の条件だけ。")
+        + "駅ポートが満車になると返却失敗で台数が急増するため、"
+        f"需要が高位に近ければ駅ポートを{rh_['cap']}台（{cap_name.get(rh_['cap'], '')}）にする。",
         f"{reps}回のばらつきは、低位需要で数台、駅ポートが満車になる高位需要では10台以上。計画は上側の値で見込むと安全。",
         "需要（転換率）が結果を最も左右するため、東京都資料での確定と再計算を最優先で進める。"])
     put(by_id(s, 23), "モビリティポート検討")
@@ -1152,7 +1170,8 @@ def main():
                     rows.append(rr)
         df = pd.DataFrame(rows, columns=["代替", "運用", "駅容量", "台数 充足80%", "台数 失敗5%", "台数 失敗1%",
                                          "月充足率(5%)", "返却失敗(5%)", "年間費用万円(5%)"])
-        table(s, 1.15, 2.95, 17.7, df, col_w=[1.3, 0.8, 1.0, 2.2, 2.2, 2.6, 2.4, 2.4, 2.8], size=10, row_h=0.395,
+        table(s, 1.15, 2.95, 17.7, df, col_w=[1.3, 0.8, 1.0, 2.2, 2.2, 2.6, 2.4, 2.4, 2.8],
+              size=10 if len(df) <= 18 else 9, row_h=min(0.395, 7.9 / (len(df) + 1)),
               first_bold=False)
 
     # テンプレートの元スライドを削除
