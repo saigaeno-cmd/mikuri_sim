@@ -773,9 +773,10 @@ def main():
         rows.append(rr)
     table(s, 10.2, 3.1, 8.65, pd.DataFrame(rows, columns=["需要"] + [f"容量{c}台" for c in caps]),
           col_w=[1.5] + [7.15 / len(caps)] * len(caps), size=11 if len(caps) > 3 else 12, row_h=0.6)
-    hi32 = sel(hi_s, cap=max(caps))
+    hi_cap = rec[hi_s]["cap"] if rec.get(hi_s) else max(caps)
+    hi32 = sel(hi_s, cap=hi_cap)
     hi_rf = hi32[hi32["達成"]]["月_返却失敗率"].median() if len(hi32) else np.nan
-    cap_note = (f"低位なら{rec[lo_s]['cap'] if rec.get(lo_s) else base_cap}台で足りる。高位では{max(caps)}台にすると台数・費用とも下がる"
+    cap_note = (f"低位なら{rec[lo_s]['cap'] if rec.get(lo_s) else base_cap}台で足りる。高位では{hi_cap}台（{cap_name.get(hi_cap, '')}）が最も安い"
                 + (f"が、それでも返却失敗が{hi_rf:.0%}残る。区画の拡張か代替乗車(ii)の検討が必要。"
                    if hi_rf > 0.05 else "。"))
     cap_lines = []
@@ -791,7 +792,9 @@ def main():
         cap_note], size=14, space_after=8)
 
     # 10 リバランス a/b/c
-    s = frame("リバランス運用 a・b・c の比較", "Rebalancing Patterns", f"日中に駅の余剰を戻しても台数は減らない（駅ポート{base_cap}台）")
+    s = frame("リバランス運用 a・b・c の比較", "Rebalancing Patterns",
+              f"日中に駅の余剰を戻しても台数は減らない（駅ポート{base_cap}台）" if not better
+              else "指定の基準（期待需要＋1台）では、日中のリバランスで台数は減らない")
     rows = []
     for scen in (lo_s, hi_s):
         for pat in ("a", "b", "c"):
@@ -818,6 +821,16 @@ def main():
         tb(s, 12.5, 7.15, 6.35, 0.4, (f"追加検証：駅に残す台数を95%点にした場合（1回・駅{base_cap}台）", {"bold": True, "size": 13, "color": MUTED}))
         table(s, 12.5, 7.6, 6.35, bb.rename(columns={"需要シナリオ": "需要", "駅に残す台数の基準": "駅に残す基準", "合計台数": "台数"}),
               col_w=[0.9, 0.7, 3.75, 1.0], size=10, row_h=0.32)
+        notes = []
+        for sc_, g_ in buf.groupby("需要シナリオ", sort=False):
+            a_ = g_[g_["運用"] == "a"]["合計台数"]
+            q_ = g_[g_["駅に残す台数の基準"].astype(str).str.contains("95")]
+            if len(a_) and pd.notna(a_.iloc[0]) and len(q_) and q_["合計台数"].min() < a_.iloc[0]:
+                bq = q_.loc[q_["合計台数"].idxmin()]
+                notes.append(f"{short_scen(sc_)}：駅に95%点を残す運用{bq['運用']}なら {a_.iloc[0]:.0f}→{bq['合計台数']:.0f}台")
+        if notes:
+            tb(s, 1.15, 8.9, 11.0, 1.2, [("駅に残す台数を「95%点」にすると日中のリバランスでも台数が減る場合がある（" + "、".join(notes)
+                                          + "）。この基準での全条件の計算は今後の課題。", {"size": 13, "color": TEAL})], size=13)
     tb(s, 1.15, 3.1 + 0.55 * (len(rows) + 1) + 0.4, 11.0, 2.6, [
         bc_note,
         "軽トラック：キックボード8台・自転車4台/往復、作業30分＋3分/台＋10分/追加往復。"], size=14, space_after=8)
@@ -826,7 +839,9 @@ def main():
     if frt is not None or dis is not None:
         s = frame("運用ルールの追加検証", "Operating Rules", f"満車時の扱いと利用離れ（失敗率5%・{SUBTXT}・運用a、各3回の中央値）")
         if frt is not None:
-            f2 = frt.copy()
+            # 満車が起きる条件（返却失敗あり・未達）だけ表示
+            keep_ = frt.groupby(["需要シナリオ", "駅ポート容量"])["返却失敗率"].transform(lambda v: v.isna().any() or (v > 0).any())
+            f2 = frt[keep_].copy()
             f2["需要シナリオ"] = f2["需要シナリオ"].map(short_scen)
             f2["満車時の扱い"] = f2["満車時の扱い"].map({"outside": "区画外→次の作業で回収", "collect": "運営者が回収に出る"})
             f2["合計台数"] = f2["合計台数"].map(lambda v: "未達" if pd.isna(v) else f"{v:.0f}台")
@@ -835,7 +850,7 @@ def main():
             f2["年間総費用"] = f2["年間総費用"].map(lambda v: "—" if pd.isna(v) else f"{v / 1e4:,.0f}万円")
             f2["駅ポート容量"] = f2["駅ポート容量"].map(lambda v: f"{v:.0f}台")
             f2 = f2[["需要シナリオ", "駅ポート容量", "満車時の扱い", "合計台数", "返却失敗率", "作業回数/日", "年間総費用"]]
-            tb(s, 1.15, 2.95, 11.0, 0.4, ("満車で返せない車両の扱い", {"bold": True, "color": NAVY, "size": 16}))
+            tb(s, 1.15, 2.95, 11.0, 0.4, ("満車で返せない車両の扱い（満車が起きる条件のみ）", {"bold": True, "color": NAVY, "size": 16}))
             table(s, 1.15, 3.45, 11.0, f2.rename(columns={"需要シナリオ": "需要", "駅ポート容量": "駅容量", "作業回数/日": "作業回/日"}),
                   col_w=[1.0, 1.1, 3.0, 1.3, 1.4, 1.3, 1.9], size=10, row_h=0.36,
                   highlight=lambda i: f2.iloc[i]["満車時の扱い"].startswith("運営者"))
@@ -854,10 +869,14 @@ def main():
                 "台数は「平日・晴れの1日」で決めるため変わらない。年間の利用回数と1回あたり費用に効く。",
                 "実証の利用記録で、失敗の翌日に利用が減るかを確かめて値を決める。"], size=13, space_after=6)
         if frt is not None:
-            col = frt.groupby("満車時の扱い")["年間総費用"].median()
-            tb(s, 1.15, 9.0, 11.0, 1.3, [
-                "運営者が回収に出ると返却失敗の車両を早く戻せるため、満車になる条件（高位・駅容量小）で台数が減る。その分、日中の作業が増える。",
-                "満車にならない条件では差がない。"], size=13, space_after=6)
+            pv = frt.pivot_table(index=["需要シナリオ", "駅ポート容量"], columns="満車時の扱い", values=["合計台数", "年間総費用"])
+            pv = pv.dropna()
+            fewer = (pv[("合計台数", "collect")] < pv[("合計台数", "outside")]).any() if len(pv) else False
+            dcost = (pv[("年間総費用", "collect")] - pv[("年間総費用", "outside")]).max() / 1e4 if len(pv) else 0
+            msg = (["運営者が回収に出ると、満車になる条件（高位・駅容量小）で台数が減る。その分、日中の作業が増える。"] if fewer else
+                   ["運営者が回収に出ても台数は減らない。回収した車両は住宅側ポートに戻るため、夕方の駅の不足は解消しない。",
+                    f"日中の作業と費用が増えるだけ（最大で年{dcost:,.0f}万円増）。満車対策は駅ポートの容量で行う。"])
+            tb(s, 1.15, 3.45 + 0.36 * (len(f2) + 1) + 0.35, 11.0, 1.3, msg, size=13, space_after=6)
 
     # 11 1か月の推移（推奨案）
     s = frame("1か月シミュレーション（推奨案）", "One-Month Simulation",
