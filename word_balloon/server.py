@@ -7,7 +7,7 @@
 
   /         参加者の回答ページ（スマホ）
   /screen   会場スクリーン用の表示ページ
-  /admin    管理ページ（要確認ワードの許可・非表示、削除、リセット。起動時に表示される管理キーが必要）
+  /admin    管理ページ（要確認ワードの許可・非表示、削除、リセット。管理者パスワードが必要。フォルダの「管理者パスワード.txt」）
 """
 import argparse
 import html
@@ -72,12 +72,13 @@ def lan_ip() -> str:
 
 def make_links(answer_url: str, port: int, admin_key: str, public: bool = False) -> dict:
     """PC 用（管理者画面・投影画面）は localhost、スマホ用（回答ページ）は LAN/公開 URL。
-    管理者画面のリンクには管理キーを # 以降に付ける（# 以降はサーバーに送られず、ページが読んで消す）。"""
+    管理者画面のリンクにはパスワードを # 以降に付ける（# 以降はサーバーに送られず、ページが読んで消す）。"""
     local = f"http://localhost:{port}"
     return {
         "admin": f"{local}/admin#key={quote(admin_key)}",
         "screen": f"{local}/screen",
         "answer": answer_url,
+        "password": admin_key,
         "answer_note": ("インターネットに公開中です。Wi‑Fi でもモバイル回線でも、どのスマホからでも開けます。"
                         "URL は起動のたびに変わります。" if public else
                         "このPCと同じWi‑Fiにつないだスマホで開きます。"),
@@ -85,12 +86,35 @@ def make_links(answer_url: str, port: int, admin_key: str, public: bool = False)
 
 
 def write_links_page(path: Path, links: dict) -> None:
-    """3つのリンクをまとめたページ（管理キーを含むので data/ に置き、配布しない）。"""
+    """3つのリンクをまとめたページ（パスワードを含むので data/ に置き、配布しない）。"""
     tpl = (STATIC / "links.html").read_text(encoding="utf-8")
     for k, v in links.items():
         tpl = tpl.replace("{{" + k + "}}", html.escape(v, quote=True))
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(tpl, encoding="utf-8")
+
+
+PASSWORD_FILE = HERE.parent / "管理者パスワード.txt"
+PASSWORD_CHARS = "abcdefghjkmnpqrstuvwxyz23456789"   # 見間違えやすい文字（0/o, 1/l/i）は使わない
+
+
+def load_password(path: Path = PASSWORD_FILE) -> str:
+    """管理者パスワード。環境変数 > ファイル > 新しく作ってファイルに保存（以後ずっと同じ）。"""
+    env = os.environ.get("WORD_BALLOON_ADMIN_KEY", "").strip()
+    if env:
+        return env
+    if path.exists():
+        # メモ帳で別の文字コードで保存されても読めるように（パスワード行は英数字の想定）
+        for line in path.read_bytes().decode("utf-8-sig", errors="replace").splitlines():
+            line = line.strip()
+            if line and not line.startswith("#"):
+                return line
+    pw = "-".join("".join(secrets.choice(PASSWORD_CHARS) for _ in range(4)) for _ in range(4))
+    path.write_text(
+        "# 気になるワード 管理者パスワード（管理者画面で入力します）\r\n"
+        "# 変えたいときは下の行を書き換えて、起動し直してください（12文字以上がおすすめ）。\r\n"
+        f"{pw}\r\n", encoding="utf-8-sig", newline="")
+    return pw
 
 
 def read_list(path) -> list[str]:
@@ -167,7 +191,7 @@ def make_handler(store: WordStore, admin_key: str, info: dict):
                 return self._json({"ok": False, "error": msg}, HTTPStatus.BAD_REQUEST)
             if path.startswith("/api/admin/"):
                 if not secrets.compare_digest(self.headers.get("X-Admin-Key", ""), admin_key):
-                    return self._json({"ok": False, "error": "管理キーが違います"}, HTTPStatus.FORBIDDEN)
+                    return self._json({"ok": False, "error": "管理者パスワードが違います（フォルダの「管理者パスワード.txt」を確認してください）"}, HTTPStatus.FORBIDDEN)
                 if path == "/api/admin/check":
                     return self._json({"ok": True})
                 if path == "/api/admin/words":
@@ -225,6 +249,7 @@ def main(argv=None):
                    help="要確認ワード（1行1語、部分一致）。含む回答は管理者が許可するまでスクリーンに出さない")
     p.add_argument("--review-all", action="store_true", help="すべての新しいワードを管理者の許可制にする")
     p.add_argument("--public-url", help="参加者に案内する URL（省略時は LAN の IP から作成）")
+    p.add_argument("--password-file", default=str(PASSWORD_FILE), help="管理者パスワードのファイル（無ければ作る）")
     p.add_argument("--open", action="store_true", help="起動後にリンク一覧をブラウザで開く")
     p.add_argument("--tunnel", action="store_true",
                    help="Cloudflare Quick Tunnel で回答ページをインターネットに公開する（cloudflared が必要）")
@@ -233,7 +258,7 @@ def main(argv=None):
 
     store = WordStore(Path(a.data), ng_words=read_list(a.ng), review_words=read_list(a.review),
                       review_all=a.review_all)
-    admin_key = os.environ.get("WORD_BALLOON_ADMIN_KEY") or secrets.token_urlsafe(12)
+    admin_key = load_password(Path(a.password_file))
     info = {"answer_url": a.public_url or f"http://{lan_ip()}:{a.port}/"}
 
     httpd = ThreadingHTTPServer((a.host, a.port), make_handler(store, admin_key, info))
@@ -250,6 +275,10 @@ def main(argv=None):
     print(f"  投影画面（PC）      : {links['screen']}")
     print(f"  回答ページ（スマホ）: {links['answer']}")
     print(f"  リンク一覧          : {links_file.resolve().as_uri()}")
+    print()
+    print(f"  ★ 管理者パスワード  : {admin_key}")
+    print(f"     （{Path(a.password_file).resolve()} に保存。毎回同じです）")
+    print()
     if tunnel and tunnel.url:
         print("  ※ 回答ページはインターネットに公開中です（同じ Wi-Fi でなくても回答できます）。")
         print("     このウィンドウを閉じると公開も止まります。URL は起動のたびに変わります。")

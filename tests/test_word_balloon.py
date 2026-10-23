@@ -176,3 +176,15 @@ def test_find_cloudflared(tmp_path):
     assert find_cloudflared(str(tmp_path / "nope"), []) is None
     (tmp_path / EXE).write_text("")
     assert find_cloudflared(None, [tmp_path]) == str(tmp_path / EXE)
+
+
+def test_password_is_created_once_and_reused(tmp_path, monkeypatch):
+    from word_balloon.server import load_password
+    monkeypatch.delenv("WORD_BALLOON_ADMIN_KEY", raising=False)
+    f = tmp_path / "pw.txt"
+    pw = load_password(f)
+    assert len(pw) == 19 and load_password(f) == pw        # 2回目も同じ
+    f.write_text("# memo\nmy-own-password\n", encoding="utf-8")
+    assert load_password(f) == "my-own-password"            # 書き換えたらそれを使う
+    monkeypatch.setenv("WORD_BALLOON_ADMIN_KEY", "from-env")
+    assert load_password(f) == "from-env"

@@ -33,9 +33,10 @@
 <main>
   <h1>管理ページ</h1>
   <div class="row">
-    <input id="key" type="password" placeholder="管理キー（起動時に表示）" aria-label="管理キー">
-    <button id="login">確認</button>
+    <input id="key" type="password" placeholder="管理者パスワード" aria-label="管理者パスワード" autocomplete="current-password">
+    <button id="login">ログイン</button>
   </div>
+  <p style="color:#5b6577;font-size:.9rem">パスワードは、アプリのフォルダにある「管理者パスワード.txt」に書いてあります（起動した黒い画面とリンク一覧にも表示されます）。</p>
   <p id="msg"></p>
   <section id="panel" hidden>
     <div class="row">
