@@ -23,11 +23,11 @@ Python 3.10 以上があれば、追加のインストールは不要です（�
 
 | リンク | 開く端末 | URL の例 |
 |---|---|---|
-| 管理者画面 | PC（このPC） | `http://localhost:8000/admin#key=…`（管理キー入り。開くとそのままログイン） |
+| 管理者画面 | PC（このPC） | `http://localhost:8000/admin#key=…`（パスワード入り。開くとそのままログイン） |
 | 投影画面 | PC（プロジェクター） | `http://localhost:8000/screen`（F キーで全画面、S キーで右パネル切替） |
 | 回答ページ | 参加者のスマホ | `https://xxxx.trycloudflare.com/`（公開時）／`http://192.168.x.x:8000/`（同じ Wi‑Fi のみ）。投影画面の右下に QR コード |
 
-リンク一覧は `word_balloon/data/links.html` に保存されます（管理キーを含むので配布しないでください）。
+リンク一覧は `word_balloon/data/links.html` に保存されます（パスワードを含むので配布しないでください）。
 管理者パスワードは、起動ファイルと同じフォルダの `管理者パスワード.txt` に書いてあります（初回の起動で自動作成され、以後ずっと同じ）。
 変えたいときはこのファイルを書き換えて起動し直してください（環境変数 `WORD_BALLOON_ADMIN_KEY` を設定すると、そちらが優先されます）。
 イベントの前に、管理者画面の「すべてリセット」で練習分を消してください。
@@ -66,7 +66,7 @@ Python 3.10 以上があれば、追加のインストールは不要です（�
 | 回答の保存先 | `--data`（既定 `word_balloon/data/answers.json`。再起動しても回答は残る） |
 | NG ワード | `word_balloon/ng_words.txt` に1行1語（部分一致で受付拒否） |
 | 要確認ワード | `word_balloon/review_words.txt` に1行1語（部分一致で承認待ち）。`--review` で別ファイル、`--review-all` で全ワード許可制 |
-| 管理キー | 環境変数 `WORD_BALLOON_ADMIN_KEY`（未設定なら起動ごとにランダム） |
+| 管理者パスワード | `管理者パスワード.txt`（初回に自動作成）。環境変数 `WORD_BALLOON_ADMIN_KEY` があれば優先 |
 | 案内 URL | `--public-url`（クラウド等で公開し、IP 以外の URL を案内する場合） |
 | 1ワードの最大文字数 | 20文字（`store.py` の `MAX_LEN`） |
 | 円の大きさ | 表示エリアに対する円の面積の目安 `FILL`、最小半径 `MIN_R`（`static/screen.html`） |
