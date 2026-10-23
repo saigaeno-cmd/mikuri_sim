@@ -12,9 +12,12 @@
 
 Python 3.10 以上があれば、追加のインストールは不要です（標準ライブラリのみ）。
 
-- **Windows**：`start_word_balloon_windows.bat` をダブルクリック
-- **Mac / Linux**：`./start_word_balloon_mac_linux.sh`
-- コマンドで：`python word_balloon/server.py --open`（`--port 8080` などで変更可）
+| 起動方法 | 参加者が回答できる範囲 |
+|---|---|
+| `start_word_balloon_windows.bat`（Windows・おすすめ） | **どこからでも**（Wi‑Fi でもモバイル回線でも）。回答ページをインターネットに公開 |
+| `start_word_balloon_windows_lan.bat`（Windows） | このPCと同じ Wi‑Fi のスマホだけ |
+| `./start_word_balloon_mac_linux.sh`（Mac / Linux） | cloudflared があれば（`brew install cloudflared`）どこからでも、なければ同じ Wi‑Fi のみ |
+| `python word_balloon/server.py --open [--tunnel]` | `--tunnel` を付けるとインターネット公開 |
 
 起動すると **リンク一覧** のページがブラウザで開き、3つのリンクが並びます。
 
@@ -22,11 +25,25 @@ Python 3.10 以上があれば、追加のインストールは不要です（�
 |---|---|---|
 | 管理者画面 | PC（このPC） | `http://localhost:8000/admin#key=…`（管理キー入り。開くとそのままログイン） |
 | 投影画面 | PC（プロジェクター） | `http://localhost:8000/screen`（F キーで全画面、S キーで右パネル切替） |
-| 回答ページ | 参加者のスマホ | `http://192.168.x.x:8000/`（同じ Wi‑Fi から。投影画面の右下に QR コード） |
+| 回答ページ | 参加者のスマホ | `https://xxxx.trycloudflare.com/`（公開時）／`http://192.168.x.x:8000/`（同じ Wi‑Fi のみ）。投影画面の右下に QR コード |
 
 リンク一覧は `word_balloon/data/links.html` に保存されます（管理キーを含むので配布しないでください）。
 管理キーは起動のたびに変わります。固定したいときは環境変数 `WORD_BALLOON_ADMIN_KEY` を設定してください。
 イベントの前に、管理者画面の「すべてリセット」で練習分を消してください。
+
+### インターネット公開（Cloudflare Quick Tunnel）のしくみ
+
+- Cloudflare 公式の無料ツール **cloudflared** を使います（アカウント登録は不要）。
+  Windows の起動ファイルは、初回に GitHub の公式配布元から `cloudflared.exe` を自動でダウンロードしてフォルダに置きます。
+  自動で入らないときは https://github.com/cloudflare/cloudflared/releases から `cloudflared-windows-amd64.exe` を
+  ダウンロードし、名前を `cloudflared.exe` にして起動ファイルと同じフォルダに置いてください。
+- 公開されるのは PC で動いているこのアプリだけです。URL（`https://xxxx.trycloudflare.com`）は起動のたびに変わるので、
+  当日、投影画面の QR コードで案内してください。
+- 黒い画面（サーバー）を閉じると公開も止まります。PC はインターネットにつながっている必要があります。
+- インターネットにつながらない・cloudflared が無いときは、自動的に同じ Wi‑Fi 向けで起動します。
+- 管理者画面と投影画面は、このPCの `localhost` で開きます。公開URLの `/admin` は管理キーが無いと操作できません（キーは16文字のランダム）。
+- いたずら対策として、1台のスマホから1分に10件、1つの回線（IP）から1分に120件までしか受け付けません。
+- 会社のPCでは、こうしたツールの利用がセキュリティ方針で制限されていることがあります。事前に確認してください。
 
 ## コンプライアンス対策（管理者の許可制）
 
@@ -57,6 +74,5 @@ QR コードの表示にはインターネット接続（cdnjs）が必要です
 
 ## 注意
 
-- 参加者のスマホから PC に接続できるよう、PC のファイアウォールでポートを許可してください。
-  会場 Wi-Fi で端末同士の通信が遮断されている場合は、ポケット Wi-Fi などを用意するか、`--public-url` で公開サーバーに置いてください。
+- 同じ Wi‑Fi 向けで使う場合は、参加者のスマホから PC に接続できるよう、PC のファイアウォールでポートを許可してください。
 - テスト：`python -m pytest tests/test_word_balloon.py`

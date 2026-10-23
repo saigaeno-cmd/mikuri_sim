@@ -43,13 +43,13 @@
     <div class="card">
       <span class="tag" style="background:#2e9e6a">スマホ・参加者</span>
       <h2>回答ページ</h2>
-      <p>このPCと同じWi‑Fiにつないだスマホで開きます。投影画面の右下にも同じQRコードが出ます。</p>
+      <p>{{answer_note}}投影画面の右下にも同じQRコードが出ます。</p>
       <div id="qr"></div>
       <code>{{answer}}</code>
       <a class="btn" style="background:#2e9e6a" href="{{answer}}" target="_blank" rel="noopener">回答ページを開く</a>
     </div>
   </div>
-  <p class="warn">スマホで回答ページが開けないときは、PCのファイアウォールでこのポートを許可しているか、会場Wi‑Fiが端末どうしの通信を止めていないかを確認してください。</p>
+  <p class="warn">管理者画面と投影画面は、このPCでだけ開けるリンクです。スマホで回答ページが開けないときは、起動した黒い画面のメッセージを確認してください。</p>
 </main>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
 <script>

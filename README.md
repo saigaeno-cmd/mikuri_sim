@@ -4,7 +4,7 @@
 電動アシスト自転車と電動キックボードの混在フリートで結ぶシェアリングの「ポート配置・台数・運用・費用」を検討するツール。
 
 ## 同梱ツール：気になるワード バルーン表示
-会場アンケートの回答ワードをスクリーンにバルーン表示するアプリは `word_balloon/` にあります（Windows は `start_word_balloon_windows.bat`、Mac/Linux は `start_word_balloon_mac_linux.sh` で起動。詳細は `word_balloon/README.md`）。
+会場アンケートの回答ワードをスクリーンにバルーン表示するアプリは `word_balloon/` にあります（Windows は `start_word_balloon_windows.bat` で起動すると回答ページをインターネットに公開。Mac/Linux は `start_word_balloon_mac_linux.sh`。詳細は `word_balloon/README.md`）。
 
 ## 手順
 ```bash

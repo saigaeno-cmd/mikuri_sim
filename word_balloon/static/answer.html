@@ -43,7 +43,11 @@
 const f = document.getElementById('f'), w = document.getElementById('w'), b = document.getElementById('b'),
       m = document.getElementById('m'), n = document.getElementById('n'), h = document.getElementById('h');
 const COOLDOWN_MS = 3000;
-let sent = [];
+let sent = [], client = '';
+try {   // 連続投稿の制限に使う端末ごとのランダムな ID（個人は特定しない）
+  client = localStorage.getItem('wb_client') || '';
+  if (!client) { client = Math.random().toString(36).slice(2) + Date.now().toString(36); localStorage.setItem('wb_client', client); }
+} catch (e) { client = Math.random().toString(36).slice(2); }
 try { sent = JSON.parse(localStorage.getItem('wb_sent') || '[]'); } catch (e) {}
 function renderHistory() {
   h.innerHTML = '';
@@ -58,7 +62,7 @@ f.addEventListener('submit', async e => {
   b.disabled = true; m.className = 'msg'; m.textContent = '送信中…';
   try {
     const r = await fetch('/api/answer', { method: 'POST', headers: { 'Content-Type': 'application/json' },
-                                           body: JSON.stringify({ word }) });
+                                           body: JSON.stringify({ word, client }) });
     const d = await r.json();
     if (d.ok) {
       m.className = 'msg ok'; m.textContent = `「${d.word}」を送信しました！`;

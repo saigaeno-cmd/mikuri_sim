@@ -1,4 +1,5 @@
 import json
+import sys
 import threading
 import urllib.error
 import urllib.request
@@ -75,7 +76,7 @@ def test_review_all_and_legacy_file(tmp_path):
 @pytest.fixture
 def server():
     store = WordStore(review_words=["NG候補"])
-    httpd = ThreadingHTTPServer(("127.0.0.1", 0), make_handler(store, "secret", "http://x/"))
+    httpd = ThreadingHTTPServer(("127.0.0.1", 0), make_handler(store, "secret", {"answer_url": "http://x/"}))
     threading.Thread(target=httpd.serve_forever, daemon=True).start()
     yield f"http://127.0.0.1:{httpd.server_address[1]}"
     httpd.shutdown()
@@ -114,3 +115,64 @@ def test_http_api(server):
     for page in ("/", "/screen", "/admin"):
         with urllib.request.urlopen(server + page) as r:
             assert r.status == 200 and b"<html" in r.read()
+
+
+def test_rate_limiter():
+    from word_balloon.server import RateLimiter
+    r = RateLimiter(3, window=60)
+    assert all(r.allow("a", now=t) for t in (0, 1, 2))
+    assert not r.allow("a", now=3)
+    assert r.allow("b", now=3)          # 別の端末は別に数える
+    assert r.allow("a", now=61.5)       # 1分たてば戻る
+
+
+def test_answer_flood_is_limited(server):
+    for i in range(10):
+        assert call(server + "/api/answer", {"word": f"w{i}", "client": "c1"})[0] == 200
+    status, body = call(server + "/api/answer", {"word": "w", "client": "c1"})
+    assert status == 429 and not body["ok"]
+    assert call(server + "/api/answer", {"word": "w", "client": "c2"})[0] == 200
+
+
+def fake_cloudflared(tmp_path, body):
+    """cloudflared の代わりに、同じ形式のメッセージを出すだけのスクリプト。"""
+    exe = tmp_path / "cloudflared"
+    exe.write_text("#!" + sys.executable + "\n" + body, encoding="utf-8")
+    exe.chmod(0o755)
+    return str(exe)
+
+
+@pytest.mark.skipif(sys.platform == "win32", reason="shebang スクリプトで代用するため")
+def test_tunnel_reads_quick_tunnel_url(tmp_path):
+    from word_balloon.tunnel import Tunnel
+    exe = fake_cloudflared(tmp_path, (
+        "import sys, time\n"
+        "p = lambda s: (print(s, flush=True))\n"
+        "p('INF Requesting new quick Tunnel on trycloudflare.com...')\n"
+        "p('INF +--------------------------------------------------------------------------------------------+')\n"
+        "p('INF |  Your quick Tunnel has been created! Visit it at (it may take some time to be reachable):  |')\n"
+        "p('INF |  https://word-balloon-test.trycloudflare.com                                               |')\n"
+        "p('INF see https://www.cloudflare.com/website-terms/')\n"
+        "time.sleep(30)\n"))
+    t = Tunnel(exe, 8000)
+    try:
+        assert t.wait_url(10) == "https://word-balloon-test.trycloudflare.com/"
+    finally:
+        t.stop()
+    assert t.proc.poll() is not None
+
+
+@pytest.mark.skipif(sys.platform == "win32", reason="shebang スクリプトで代用するため")
+def test_tunnel_failure_returns_none(tmp_path):
+    from word_balloon.tunnel import Tunnel
+    exe = fake_cloudflared(tmp_path, "print('ERR failed to request quick Tunnel', flush=True)\n")
+    t = Tunnel(exe, 8000)
+    assert t.wait_url(10) is None
+    assert any("failed" in l for l in t.log)
+
+
+def test_find_cloudflared(tmp_path):
+    from word_balloon.tunnel import EXE, find_cloudflared
+    assert find_cloudflared(str(tmp_path / "nope"), []) is None
+    (tmp_path / EXE).write_text("")
+    assert find_cloudflared(None, [tmp_path]) == str(tmp_path / EXE)

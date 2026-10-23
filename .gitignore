@@ -5,3 +5,5 @@ __pycache__/
 *.tmp
 data/output/study/_map.png
 word_balloon/data/
+cloudflared
+cloudflared.exe
