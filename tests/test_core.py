@@ -413,3 +413,16 @@ def test_import_usage_log_and_survey_template():
     finally:
         p.unlink()
     assert list(s["destination"]) == ["station", "aeon", "other"] and (s["trips"] == 1).all()
+
+
+def test_pilot_grid_fixed_fleet():
+    from src.loaders import load_survey, survey_path
+    from src.pilot import pilot_best, pilot_grid
+    net = _real_net()
+    c = {**CFG, "simulation": {**CFG["simulation"], "n_households": len(net.houses)}}
+    sv = load_survey(survey_path(c)[0], c)
+    g = pilot_grid(net, c, sv, 0.3, n_total=10, ks=(1, 2), n_rep=20)
+    assert len(g) == 2 * 11 and ((g["自転車"] + g["キックボード"]) == 10).all()
+    b = pilot_best(g)
+    assert b["利用"] <= 10 * 2 + 1e-9                          # 10台×朝夕1往復で頭打ち（夜に初期配置へ戻す）
+    assert b["断られた/日"] > 0

@@ -106,7 +106,7 @@ def demand_sidebar(cfg, survey, *, key_prefix: str = "") -> DemandSpec:
     """転換率・曜日・用途・時間帯別需要・目的地比率。st.sidebar の中で呼ぶ。"""
     sim = cfg["simulation"]
     scen = cfg.get("demand_scenarios", {})
-    mode = st.radio("需要の指定", ["シナリオ", "転換率（10%刻み）"], horizontal=True, key=f"{key_prefix}dmode",
+    mode = st.radio("需要の指定", ["シナリオ", "転換率（5%刻み）"], horizontal=True, key=f"{key_prefix}dmode",
                     help="シナリオ：低位・高位（暫定値。都の資料で確定予定）と旧シナリオ（一律転換率10%・30%）")
     if mode == "シナリオ" and scen:
         name = st.selectbox("需要シナリオ", list(scen), key=f"{key_prefix}scen",
