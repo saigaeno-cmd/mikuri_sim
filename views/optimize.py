@@ -9,12 +9,13 @@ import streamlit as st
 from streamlit_folium import st_folium
 
 from src import viz
-from src.engine import EB, KB, simulate_days
+from src.engine import EB, KB
 from src.export import save_ports
 from src.loaders import ROOT
 from src.plan import demand_hourly, fleet_for, make_ops, optimal_layout
 from src.study import annual_cost, min_fleet, month_eval
-from src.ui import demand_sidebar, fresh_cfg, header_warnings, load_or_stop, ops_sidebar
+from src.ui import demand_sidebar, fresh_cfg, header_warnings, load_or_stop, month_specs, ops_sidebar
+from src.weather_data import weather_path
 
 BASE_CFG, SURVEY, NET, FLAGS, DATA_KEY = load_or_stop("opt")
 cfg = fresh_cfg(BASE_CFG)
@@ -22,8 +23,8 @@ cfg = fresh_cfg(BASE_CFG)
 with st.sidebar:
     st.header("条件")
     st.subheader("需要")
-    spec = demand_sidebar(cfg, SURVEY, key_prefix="opt_")
-    ops_spec = ops_sidebar(cfg, key_prefix="opt_")
+    spec = demand_sidebar(cfg, SURVEY, key_prefix="opt_", show_day=False)
+    ops_spec = ops_sidebar(cfg, key_prefix="opt_", show_period=False)
     st.subheader("最適化")
     k = st.slider("住宅側ポート数", 1, cfg["simulation"]["max_ports"], 3, key="opt_k")
     target_f = st.slider("目標充足率", 50, 99, round(cfg["service"]["target_fulfillment"] * 100), 1, format="%d%%",
@@ -31,49 +32,50 @@ with st.sidebar:
 
 st.title("① ポート最適化")
 st.caption("住宅側ポートの位置は、車種比率で加重した（徒歩＋走行＋目的地側徒歩）の時間が最小になる地点（p-median）。"
-           "台数は「自転車×キックボード」の組み合わせから、貸出失敗率が目標以下になる最小の合計台数を探します。")
+           "台数は「自転車×キックボード」の組み合わせから、選んだ1か月（平日・休日・南栗橋の天気を含む）の"
+           "貸出失敗率が目標以下になる最小の合計台数を探します。")
 header_warnings(NET, FLAGS)
 
 P, conv = spec.purposes, spec.conversion
-day = spec.opts.get("day") or "平日"
-oh, rh, sh = demand_hourly(SURVEY, cfg, conv, P, day, spec.opts.get("hourly"), spec.station_share)
-oh_wd, rh_wd, _ = demand_hourly(SURVEY, cfg, conv, P, "平日", None, spec.station_share)
+oh_wd, rh_wd, sh = demand_hourly(SURVEY, cfg, conv, P, "平日", None, spec.station_share)
 oh_hd, rh_hd, _ = demand_hourly(SURVEY, cfg, conv, P, "休日", None, spec.station_share)
-search_weather = ops_spec.weather if ops_spec.period == "1日" else "晴れ"
+oh, rh = oh_wd, rh_wd                          # ポート位置・初期配置は平日の需要で決める
+DEM = {"平日": (oh_wd, rh_wd), "休日": (oh_hd, rh_hd)}
+OPS_KW = dict(pattern=ops_spec.pattern, substitution=ops_spec.substitution, ebike_share=ops_spec.ebike_share,
+              procedure_sec=ops_spec.procedure_sec)
+CAL, SPECS, SOURCE = month_specs(cfg, ops_spec.year, ops_spec.month, DEM, OPS_KW)
+N_REP = len(SPECS) * ops_spec.n_rep            # 1か月 × くり返し回数
+_wp = weather_path(cfg)
+WKEY = f"{_wp.stat().st_mtime if _wp.exists() else 0}"
 targets = tuple(sorted({round(1 - target_f, 4), 0.05, 0.01}, reverse=True))
 
 
 @st.cache_data(show_spinner="最小台数を探索中…（自転車×キックボードの組み合わせごとにシミュレーション）")
-def run_search(cfg_json, spec_key, ops_key, k, targets, data_key):
+def run_search(cfg_json, spec_key, ops_key, k, targets, data_key, wkey):
     L, ports, assign = optimal_layout(NET, cfg, sh, k, ops_spec.ebike_share, station_cap=ops_spec.station_cap)
-    ops = make_ops(cfg, weather=search_weather, pattern=ops_spec.pattern, substitution=ops_spec.substitution,
-                   ebike_share=ops_spec.ebike_share, procedure_sec=ops_spec.procedure_sec)
-    res = min_fleet(L, ops, oh, rh, targets=targets, n_rep=ops_spec.n_rep, seed=0)
+    ops = make_ops(cfg, weather="晴れ", **OPS_KW)
+    res = min_fleet(L, ops, oh, rh, targets=targets, n_rep=N_REP, seed=0, day_specs=SPECS)
     res.pop("_cache")
     return L, ports, assign, ops, res
 
 
 @st.cache_data(show_spinner="選んだ案を評価中…")
-def run_eval(cfg_json, spec_key, ops_key, k, nb, nk, data_key, _L, _ops):
+def run_eval(cfg_json, spec_key, ops_key, k, nb, nk, data_key, wkey, _L, _ops):
     F = fleet_for(_L, nb, nk, oh, rh, _ops)
-    day_res = simulate_days(_L, F, _ops, oh, rh, n_rep=ops_spec.n_rep, seed=1)
-    m_sum, daily = month_eval(_L, F, cfg, {"平日": (oh_wd, rh_wd), "休日": (oh_hd, rh_hd)}, pattern=ops_spec.pattern,
-                              substitution=ops_spec.substitution, ebike_share=ops_spec.ebike_share,
-                              procedure_sec=ops_spec.procedure_sec, month=ops_spec.month, seed=1)
+    m_sum, daily = month_eval(_L, F, cfg, DEM, month=ops_spec.month, seed=1, cal=CAL, **OPS_KW)
     cost = annual_cost(cfg, F, _L.k, daily, ops_spec.station_cap)
-    return F, day_res, m_sum, daily, cost
+    return F, m_sum, daily, cost
 
 
 if oh.sum() <= 0:
     st.warning("この条件では利用希望がありません。")
     st.stop()
 cfg_json = json.dumps(cfg, ensure_ascii=False, sort_keys=True, default=str)
-L, ports, assign, ops, res = run_search(cfg_json, spec.key(), ops_spec.key(), k, targets, DATA_KEY)
+L, ports, assign, ops, res = run_search(cfg_json, spec.key(), ops_spec.key(), k, targets, DATA_KEY, WKEY)
 
 # ---------- 目標ごとの最小台数 ----------
 st.subheader("目標ごとの最小台数")
-basis = (f"{day}・{search_weather}の1日 × {ops_spec.n_rep}回" if ops_spec.period == "1日"
-         else f"平日・晴れの1日 × {ops_spec.n_rep}回")
+basis = f"{ops_spec.year}年{ops_spec.month}月の1か月（{SOURCE}）× {ops_spec.n_rep}回"
 rows = []
 for t in targets:
     r = res[t]
@@ -92,11 +94,11 @@ if not ok:
     st.stop()
 choice = st.radio("詳しく見る案", [r["目標"] for r in ok], horizontal=True, key="opt_choice")
 sel = next(r for r in ok if r["目標"] == choice)
-F, day_res, m_sum, daily, cost = run_eval(cfg_json, spec.key(), ops_spec.key(), k, sel["自転車"], sel["キックボード"],
-                                          DATA_KEY, L, ops)
-R = day_res if ops_spec.period == "1日" else m_sum
-period_txt = (f"1日（{day}・{ops_spec.weather}）× {ops_spec.n_rep}回の平均" if ops_spec.period == "1日"
-              else f"{cfg['month']['year']}年{ops_spec.month}月の1か月（平日・休日・気象を含む）")
+F, m_sum, daily, cost = run_eval(cfg_json, spec.key(), ops_spec.key(), k, sel["自転車"], sel["キックボード"],
+                                 DATA_KEY, WKEY, L, ops)
+R = m_sum
+n_hol = int((CAL["曜日区分"] == "休日").sum())
+period_txt = f"{ops_spec.year}年{ops_spec.month}月の1か月（平日{len(CAL) - n_hol}日・休日{n_hol}日、{SOURCE}）"
 
 # ---------- 選んだ案 ----------
 c1, c2, c3, c4 = st.columns(4)
@@ -125,7 +127,7 @@ st.caption(f"駅西口ポートの初期台数：自転車{F.init[L.k, EB]}台�
 a, b = st.columns([3, 2])
 with a:
     st.markdown("**年間費用の内訳**")
-    keys = ["車両（償却）", "車両維持", "ポート（償却）", "用地", "人件費（リバランス）", "軽トラック"]
+    keys = ["車両（償却）", "車両維持", "ポート（償却）", "用地", "人件費（リバランス）", "軽トラック", "人件費（電池交換）"]
     st.dataframe(pd.DataFrame({"項目": keys + ["年間総費用"], "円/年": [cost[x] for x in keys + ["年間総費用"]]})
                  .style.format({"円/年": "{:,.0f}"}), hide_index=True, use_container_width=True)
     bm = cfg["cost"]["benchmarks"]
@@ -139,13 +141,18 @@ with b:
         st.plotly_chart(viz.hourly_service(pd.DataFrame({"時": np.arange(24), "利用希望": hr[:, 0], "利用": hr[:, 1]})),
                         use_container_width=True)
 
-if ops_spec.period == "1か月":
-    st.subheader(f"{cfg['month']['year']}年{ops_spec.month}月の日別結果")
-    show = daily[["日付", "曜日区分", "気象", "利用希望", "利用", "充足率", "返却失敗/日", "代替乗車率", "駅ポート最大在庫",
-                  "作業時間(分/日)"]]
-    st.dataframe(show.style.format({"利用希望": "{:.0f}", "利用": "{:.0f}", "充足率": "{:.0%}", "代替乗車率": "{:.0%}",
-                                    "返却失敗/日": "{:.0f}", "作業時間(分/日)": "{:.0f}"}),
-                 hide_index=True, use_container_width=True, height=300)
+st.subheader(f"{ops_spec.year}年{ops_spec.month}月の日別結果")
+weather_cols = [c for c in ("降水量mm", "最高気温", "最低気温", "最大風速") if c in CAL]
+show = daily[["日付", "曜日区分", "気象", "利用希望", "利用", "充足率", "返却失敗/日", "代替乗車率", "駅ポート最大在庫",
+              "作業時間(分/日)"]].copy()
+for c in weather_cols:
+    show.insert(3 + weather_cols.index(c), c, CAL[c].to_numpy())
+st.dataframe(show.style.format({"利用希望": "{:.0f}", "利用": "{:.0f}", "充足率": "{:.0%}", "代替乗車率": "{:.0%}",
+                                "返却失敗/日": "{:.0f}", "作業時間(分/日)": "{:.0f}", "降水量mm": "{:.1f}",
+                                "最高気温": "{:.1f}", "最低気温": "{:.1f}", "最大風速": "{:.1f}"}, na_rep="-"),
+             hide_index=True, use_container_width=True, height=300)
+st.caption(f"天気：{SOURCE}。区分の目安：日降水量10mm以上＝雨、1mm以上＝小雨、最大風速10m/s以上＝強風、"
+           "最高35℃以上＝猛暑、最低0℃未満＝寒冷。")
 
 # ---------- 運用パターンの比較 ----------
 st.subheader("リバランス運用の比較（a/b/c）")
@@ -153,16 +160,15 @@ if st.button("運用 a・b・c を同じ目標で比較する（1〜2分）"):
     t = sel["_t"]
     comp = []
     for pat in ("a", "b", "c"):
-        ops_p = make_ops(cfg, weather=search_weather, pattern=pat, substitution=ops_spec.substitution,
-                         ebike_share=ops_spec.ebike_share, procedure_sec=ops_spec.procedure_sec)
-        r = min_fleet(L, ops_p, oh, rh, targets=(t,), n_rep=ops_spec.n_rep, seed=0)[t]
+        kw_p = {**OPS_KW, "pattern": pat}
+        ops_p = make_ops(cfg, weather="晴れ", **kw_p)
+        _, specs_p, _ = month_specs(cfg, ops_spec.year, ops_spec.month, DEM, kw_p)
+        r = min_fleet(L, ops_p, oh, rh, targets=(t,), n_rep=N_REP, seed=0, day_specs=specs_p)[t]
         if r is None:
             comp.append({"運用": pat, "台数": "達成不可"})
             continue
         Fp = fleet_for(L, r["自転車"], r["キックボード"], oh, rh, ops_p)
-        ms, dl = month_eval(L, Fp, cfg, {"平日": (oh_wd, rh_wd), "休日": (oh_hd, rh_hd)}, pattern=pat,
-                            substitution=ops_spec.substitution, ebike_share=ops_spec.ebike_share,
-                            procedure_sec=ops_spec.procedure_sec, month=ops_spec.month, seed=1)
+        ms, dl = month_eval(L, Fp, cfg, DEM, month=ops_spec.month, seed=1, cal=CAL, **kw_p)
         cp = annual_cost(cfg, Fp, L.k, dl, ops_spec.station_cap)
         comp.append({"運用": pat, "台数": f"{r['自転車']}+{r['キックボード']}={r['合計']}", "駅ポート最大在庫": ms["駅ポート最大在庫"],
                      "作業回数/日": ms["作業回数/日"], "移動台数/日": ms["移動台数/日"], "年間総費用(万円)": cp["年間総費用"] / 1e4,

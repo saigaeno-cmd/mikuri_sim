@@ -20,7 +20,7 @@ header_warnings(NET, FLAGS)
 with st.sidebar:
     st.markdown("**実証の条件**")
     n_total = st.number_input("台数（自転車＋キックボード）", 1, 60, 10, key="pl_n")
-    opts = [round(c * 100) for c in cfg["simulation"]["conversion_options"]]
+    opts = list(range(5, 105, 5))              # 実証は5%から
     conv = st.select_slider("利用転換率", options=opts, value=10, format_func=lambda v: f"{v}%", key="pl_conv") / 100
     ks = st.multiselect("比べる住宅側ポート数", [1, 2, 3, 4], default=[1, 2, 3], key="pl_ks")
     cap = st.number_input("駅ポートの容量（台）", 1, 200, int(cfg["station_port"]["max_slots"]), key="pl_cap")

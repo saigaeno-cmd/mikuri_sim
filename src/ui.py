@@ -102,34 +102,8 @@ def vehicle_radio(cfg, key="vehicle"):
                     help="需要は同じ条件で、走行速度などの違いによる差を比較します。")
 
 
-def demand_sidebar(cfg, survey, *, key_prefix: str = "") -> DemandSpec:
-    """転換率・曜日・用途・時間帯別需要・目的地比率。st.sidebar の中で呼ぶ。"""
-    sim = cfg["simulation"]
-    scen = cfg.get("demand_scenarios", {})
-    mode = st.radio("需要の指定", ["シナリオ", "転換率（5%刻み）"], horizontal=True, key=f"{key_prefix}dmode",
-                    help="シナリオ：低位・高位（暫定値。都の資料で確定予定）と旧シナリオ（一律転換率10%・30%）")
-    if mode == "シナリオ" and scen:
-        name = st.selectbox("需要シナリオ", list(scen), key=f"{key_prefix}scen",
-                            format_func=lambda n: f"{n}（転換率 {scen[n]:.0%}）")
-        conv_pct = round(scen[name] * 100)
-    else:
-        opts = [round(c * 100) for c in sim.get("conversion_options", sim["conversion_rates"])]
-        conv_pct = st.select_slider("利用転換率", options=opts, value=opts[min(2, len(opts) - 1)],
-                                    format_func=lambda v: f"{v}%", key=f"{key_prefix}conv")
-    by_mode = "day" in survey.columns  # 2023アンケート（交通手段別・曜日別）
-    day = st.radio("曜日", ["平日", "休日"], horizontal=True, help="アンケートの月〜金／土日の平均",
-                   key=f"{key_prefix}day") if by_mode else None
-    all_purposes = sorted(survey.loc[survey["trips"] > 0, "purpose"].unique())
-    default_p = [p for p in cfg.get("survey_xlsx", {}).get("default_modes", []) if p in all_purposes] or all_purposes
-    purposes = st.multiselect(
-        "利用用途（転換対象の交通手段）" if by_mode else "利用用途", all_purposes,
-        default=default_p if by_mode else all_purposes, key=f"{key_prefix}purposes",
-        help="アンケートには目的の設問が無いため、現在の交通手段で区分します。既定はアンケートで「利用」と印のある手段。"
-        if by_mode else None)
-    if not purposes:
-        st.warning("用途を1つ以上選んでください。")
-        st.stop()
-
+def _hourly_editor(survey, cfg, purposes, day, key_prefix):
+    """時間帯別の需要の編集（1日の計算用）。手入力があれば ((時, 往路, 復路), …)、無ければ None。"""
     with st.expander("時間帯別の需要（編集可）", expanded=False):
         st.caption("街区全体・転換前のトリップ数/日。初期値はアンケート（÷回答23世帯×戸数）。"
                    "編集すると、その時間帯の合計をこの値に置き換えます（内訳の比率は維持）。")
@@ -146,8 +120,40 @@ def demand_sidebar(cfg, survey, *, key_prefix: str = "") -> DemandSpec:
                                       base[["往路", "復路"]].to_numpy(dtype=float))
         st.caption(f"合計：往路 {edited['往路'].sum():.1f} ／ 復路 {edited['復路'].sum():.1f}"
                    + ("（**手入力値を使用中**）" if edited_flag else "（アンケート値）"))
-    hourly = tuple((int(h), float(o), float(r)) for h, o, r in edited[["時", "往路", "復路"]].itertuples(index=False)) \
+    return tuple((int(h), float(o), float(r)) for h, o, r in edited[["時", "往路", "復路"]].itertuples(index=False)) \
         if edited_flag else None
+
+
+def demand_sidebar(cfg, survey, *, key_prefix: str = "", show_day: bool = True) -> DemandSpec:
+    """転換率・曜日・用途・時間帯別需要・目的地比率。st.sidebar の中で呼ぶ。
+    show_day=False（1か月の計算）：曜日の選択と時間帯別需要の編集を出さない（平日・休日はそれぞれのアンケート値）。"""
+    sim = cfg["simulation"]
+    scen = cfg.get("demand_scenarios", {})
+    mode = st.radio("需要の指定", ["転換率（5%刻み）", "シナリオ"], horizontal=True, key=f"{key_prefix}dmode",
+                    help="シナリオ：低位・高位（暫定値。都の資料で確定予定）と旧シナリオ（一律転換率10%・30%）")
+    if mode == "シナリオ" and scen:
+        name = st.selectbox("需要シナリオ", list(scen), key=f"{key_prefix}scen",
+                            format_func=lambda n: f"{n}（転換率 {scen[n]:.0%}）")
+        conv_pct = round(scen[name] * 100)
+    else:
+        opts = [round(c * 100) for c in sim.get("conversion_options", sim["conversion_rates"])]
+        conv_pct = st.select_slider("利用転換率", options=opts, value=10 if 10 in opts else opts[0],
+                                    format_func=lambda v: f"{v}%", key=f"{key_prefix}conv")
+    by_mode = "day" in survey.columns  # 2023アンケート（交通手段別・曜日別）
+    day = (st.radio("曜日", ["平日", "休日"], horizontal=True, help="アンケートの月〜金／土日の平均",
+                    key=f"{key_prefix}day") if show_day else "平日") if by_mode else None
+    all_purposes = sorted(survey.loc[survey["trips"] > 0, "purpose"].unique())
+    default_p = [p for p in cfg.get("survey_xlsx", {}).get("default_modes", []) if p in all_purposes] or all_purposes
+    purposes = st.multiselect(
+        "利用用途（転換対象の交通手段）" if by_mode else "利用用途", all_purposes,
+        default=default_p if by_mode else all_purposes, key=f"{key_prefix}purposes",
+        help="アンケートには目的の設問が無いため、現在の交通手段で区分します。既定はアンケートで「利用」と印のある手段。"
+        if by_mode else None)
+    if not purposes:
+        st.warning("用途を1つ以上選んでください。")
+        st.stop()
+
+    hourly = _hourly_editor(survey, cfg, purposes, day, key_prefix) if show_day else None
     opts = {"day": day, "hourly": hourly}
 
     st.markdown("**目的地の比率**")
@@ -183,9 +189,51 @@ class OpsSpec:
     weather: str          # 1日のときの気象
     month: int
     n_rep: int
+    year: int = 0
 
     def key(self) -> str:
         return json.dumps(self.__dict__, ensure_ascii=False, sort_keys=True)
+
+
+def month_sidebar(cfg, key_prefix: str = ""):
+    """対象月（南栗橋の実際の天気データがある月。無ければ平年値から抽選）と、探索で1か月を何回くり返すか。"""
+    from .weather_data import available_months
+    st.subheader("期間（1か月）")
+    months = available_months(cfg)
+    if months:
+        ym = st.selectbox("対象月（南栗橋の実際の天気）", months, format_func=lambda t: f"{t[0]}年{t[1]}月",
+                          key=f"{key_prefix}ym")
+        year, month = ym
+    else:
+        year = int(cfg["month"]["year"])
+        month = st.selectbox(f"対象月（{year}年）", list(range(1, 13)), index=int(cfg["month"]["month"]) - 1,
+                             format_func=lambda m: f"{m}月", key=f"{key_prefix}month")
+        st.caption("南栗橋の実際の天気データが未登録のため、平年値から日ごとに抽選しています"
+                   "（`python scripts/fetch_weather.py` で取得）。")
+    passes = st.select_slider("くり返し回数（1か月を何回分計算するか）", [1, 2, 3, 5], 2, key=f"{key_prefix}passes",
+                              help="利用希望の発生は確率的なため、同じ1か月を乱数を変えて複数回計算し平均する。")
+    return year, month, passes
+
+
+def month_specs(cfg, year: int, month: int, demand_by_daytype: dict, ops_kw: dict, seed: int = 0):
+    """1か月の暦（日付・曜日区分・気象）と、日ごとの（運用条件, 往路需要, 復路需要）の列。"""
+    from .engine import month_calendar
+    from .plan import make_ops
+    from .weather_data import actual_calendar
+    cal = actual_calendar(cfg, year, month)
+    source = "南栗橋の実際の天気"
+    if cal is None:
+        cal = month_calendar(year, month, cfg["month"].get(f"holidays_{year}", []), cfg["climate"][month],
+                             np.random.default_rng(seed + 7919))
+        source = "平年値から抽選した天気"
+    cache = {}
+    specs = []
+    for r in cal.itertuples(index=False):
+        if r.気象 not in cache:
+            cache[r.気象] = make_ops(cfg, weather=r.気象, **ops_kw)
+        oh, rh = demand_by_daytype[r.曜日区分]
+        specs.append((cache[r.気象], oh, rh))
+    return cal, specs, source
 
 
 def ops_sidebar(cfg, *, key_prefix: str = "", show_period: bool = True) -> OpsSpec:
@@ -212,6 +260,9 @@ def ops_sidebar(cfg, *, key_prefix: str = "", show_period: bool = True) -> OpsSp
         b["nightly_charge"] = st.checkbox("夜間の再配置時に毎晩充電する", value=bool(b["nightly_charge"]),
                                           key=f"{key_prefix}nchg")
     period, weather, month = "1日", "晴れ", int(cfg["month"]["month"])
+    if not show_period:                        # 1か月（南栗橋の実際の天気）で計算するページ
+        year, month, passes = month_sidebar(cfg, key_prefix)
+        return OpsSpec(es, sub, pattern, int(cap), float(proc), "1か月", "実際の天気", int(month), int(passes), int(year))
     if show_period:
         st.subheader("期間・気象")
         period = st.radio("シミュレーション期間", ["1日", "1か月"], horizontal=True, key=f"{key_prefix}period",

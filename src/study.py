@@ -18,8 +18,9 @@ class _SeqEval:
     日 i の乱数は台数によらず同じ（共通乱数）。目標との大小が統計的にはっきりした時点で打ち切り、
     はっきりしなければ n_rep 日まで計算する。"""
 
-    def __init__(self, L, ops, out_h, ret_h, n_rep, seed, chunk=10, z=2.5):
+    def __init__(self, L, ops, out_h, ret_h, n_rep, seed, chunk=10, z=2.5, day_specs=None):
         self.a = (L, ops, out_h, ret_h)
+        self.specs = day_specs                  # [(Ops, out_h, ret_h)]：日 i は specs[i % 日数]（1か月の暦）
         self.n_rep, self.seed, self.chunk, self.z = n_rep, seed, chunk, z
         self.st: dict[tuple, list] = {}        # key -> [fails(list), reqs(list)]
         self.days_run = 0
@@ -30,7 +31,8 @@ class _SeqEval:
             self.st[key] = [[], [], allocate_fleet(L, ops, key[0], key[1], out_h, ret_h, seed=self.seed)]
         f, q, F = self.st[key]
         for i in range(len(f), min(upto, self.n_rep)):
-            d, _ = simulate_day(L, F, ops, out_h, ret_h, np.random.default_rng([self.seed, i]))
+            o, oh, rh = self.specs[i % len(self.specs)] if self.specs else (ops, out_h, ret_h)
+            d, _ = simulate_day(L, F, o, oh, rh, np.random.default_rng([self.seed, i]))
             f.append(d.fail_out + d.fail_ret)
             q.append(d.req_out + d.req_ret)
             self.days_run += 1
@@ -62,16 +64,18 @@ class _SeqEval:
 
 
 def min_fleet(L: Layout, ops: Ops, out_h, ret_h, targets=(0.05, 0.01, 0.20), n_rep=60, seed=0,
-              max_each: int | None = None) -> dict:
+              max_each: int | None = None, day_specs=None) -> dict:
     """自転車台数×キックボード台数の組み合わせのうち、貸出失敗率 ≤ 目標 を満たす最小の合計台数。
     失敗率は各車種の台数に対して減少するとみなし、自転車台数ごとに必要なキックボード台数の下限を
     階段状にたどる（総当たりと同じ答えを、少ない評価回数で求める）。同じ乱数列で比べ、
     目標との大小がはっきりした組み合わせは途中の日数で打ち切る（逐次判定）。
+    day_specs を渡すと、日 i を day_specs[i % 日数]（その日の運用条件・需要）で計算する（1か月の暦で探す）。
+    初期配置は ops・out_h・ret_h（平日・晴れ）で決める。
     戻り値：{目標: {"自転車", "キックボード", "合計", "失敗率"} or None}, "_cache": {(nb,nk): 計算日数}, "_days": 総計算日数"""
     peak = peak_outflow(out_h, ret_h) * sum(m * d for m, d in zip(ops.mix, ops.demand_mult))
     if max_each is None:
         max_each = int(math.ceil(peak * 2.5)) + 8
-    ev = _SeqEval(L, ops, out_h, ret_h, n_rep, seed)
+    ev = _SeqEval(L, ops, out_h, ret_h, n_rep, seed, day_specs=day_specs)
 
     out = {}
     for tgt in sorted(targets, reverse=True):
@@ -97,12 +101,14 @@ def min_fleet(L: Layout, ops: Ops, out_h, ret_h, targets=(0.05, 0.01, 0.20), n_r
 
 # ---------------------------------------------------------------- 1か月
 def month_eval(L: Layout, fleet: Fleet, cfg, demand_by_daytype: dict, *, pattern="a", substitution=None,
-               ebike_share=None, procedure_sec=None, walk_kmh=None, month=None, seed=0):
-    """demand_by_daytype: {"平日": (out_h, ret_h), "休日": (...)}（気象補正前）。気象は月の平年出現日数から日ごとに抽選。"""
+               ebike_share=None, procedure_sec=None, walk_kmh=None, month=None, seed=0, cal=None):
+    """demand_by_daytype: {"平日": (out_h, ret_h), "休日": (...)}（気象補正前）。
+    cal（日付・曜日区分・気象）を渡せばその暦（実際の天気）で、無ければ気象を月の平年出現日数から日ごとに抽選。"""
     mcfg = cfg["month"]
     m = month or mcfg["month"]
     rng = np.random.default_rng(seed + 7919)
-    cal = month_calendar(mcfg["year"], m, mcfg.get(f"holidays_{mcfg['year']}", []), cfg["climate"][m], rng)
+    if cal is None:                            # 実際の天気の暦が無ければ平年値から抽選
+        cal = month_calendar(mcfg["year"], m, mcfg.get(f"holidays_{mcfg['year']}", []), cfg["climate"][m], rng)
     ops_cache = {}
 
     def ops_for(w):

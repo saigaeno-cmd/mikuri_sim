@@ -10,12 +10,13 @@ from streamlit_folium import st_folium
 
 from src import viz
 from src.custom_ports import ACCEPT, parse_ports, snap_ports
-from src.engine import EB, KB, Fleet, allocate_fleet, simulate_days
+from src.engine import EB, KB, Fleet, allocate_fleet
 from src.export import save_ports
 from src.loaders import ROOT
 from src.plan import custom_layout, demand_hourly, make_ops, optimal_layout
 from src.study import annual_cost, month_eval
-from src.ui import demand_sidebar, fresh_cfg, header_warnings, load_or_stop, ops_sidebar
+from src.ui import demand_sidebar, fresh_cfg, header_warnings, load_or_stop, month_specs, ops_sidebar
+from src.weather_data import weather_path
 
 BASE_CFG, SURVEY, NET, FLAGS, DATA_KEY = load_or_stop("eval")
 cfg = fresh_cfg(BASE_CFG)
@@ -26,8 +27,8 @@ DEFAULT_CAP = int(BASE_CFG["service"].get("default_port_capacity", 10))
 with st.sidebar:
     st.header("条件")
     st.subheader("需要")
-    spec = demand_sidebar(cfg, SURVEY, key_prefix="ev_")
-    ops_spec = ops_sidebar(cfg, key_prefix="ev_")
+    spec = demand_sidebar(cfg, SURVEY, key_prefix="ev_", show_day=False)
+    ops_spec = ops_sidebar(cfg, key_prefix="ev_", show_period=False)
 
 st.title("② ポート配置評価")
 st.caption("地図をクリックして住宅側ポートを置き、表で車種別の台数と収納可能台数を指定すると、充足率・移動時間・年間費用を計算します。"
@@ -35,12 +36,14 @@ st.caption("地図をクリックして住宅側ポートを置き、表で車�
 header_warnings(NET, FLAGS)
 
 P, conv = spec.purposes, spec.conversion
-day = spec.opts.get("day") or "平日"
-oh, rh, sh = demand_hourly(SURVEY, cfg, conv, P, day, spec.opts.get("hourly"), spec.station_share)
-oh_wd, rh_wd, _ = demand_hourly(SURVEY, cfg, conv, P, "平日", None, spec.station_share)
+oh_wd, rh_wd, sh = demand_hourly(SURVEY, cfg, conv, P, "平日", None, spec.station_share)
 oh_hd, rh_hd, _ = demand_hourly(SURVEY, cfg, conv, P, "休日", None, spec.station_share)
-ops = make_ops(cfg, weather=ops_spec.weather if ops_spec.period == "1日" else "晴れ", pattern=ops_spec.pattern,
-               substitution=ops_spec.substitution, ebike_share=ops_spec.ebike_share, procedure_sec=ops_spec.procedure_sec)
+oh, rh = oh_wd, rh_wd                          # 初期配置の自動配分は平日の需要で
+DEM = {"平日": (oh_wd, rh_wd), "休日": (oh_hd, rh_hd)}
+OPS_KW = dict(pattern=ops_spec.pattern, substitution=ops_spec.substitution, ebike_share=ops_spec.ebike_share,
+              procedure_sec=ops_spec.procedure_sec)
+ops = make_ops(cfg, weather="晴れ", **OPS_KW)
+CAL, _, SOURCE = month_specs(cfg, ops_spec.year, ops_spec.month, DEM, OPS_KW)
 
 # ---------- 配置の状態（表の初期値＋版番号。版が変わると表を作り直す） ----------
 ss = st.session_state
@@ -154,24 +157,23 @@ if not edited.empty:
         if sum(F.n) == 0:
             st.info("台数を入力してください。")
         else:
-            key = json.dumps([DATA_KEY, cfg, spec.key(), ops_spec.key(), use[COLS].to_dict("list"), init.tolist()],
+            _wp = weather_path(cfg)
+            key = json.dumps([DATA_KEY, _wp.stat().st_mtime if _wp.exists() else 0, cfg, spec.key(), ops_spec.key(),
+                              use[COLS].to_dict("list"), init.tolist()],
                              ensure_ascii=False, default=str)
 
             @st.cache_data(show_spinner="シミュレーション中…")
             def evaluate(key_):
-                d = simulate_days(L, F, ops, oh, rh, n_rep=ops_spec.n_rep, seed=1)
-                ms, dl = month_eval(L, F, cfg, {"平日": (oh_wd, rh_wd), "休日": (oh_hd, rh_hd)}, pattern=ops_spec.pattern,
-                                    substitution=ops_spec.substitution, ebike_share=ops_spec.ebike_share,
-                                    procedure_sec=ops_spec.procedure_sec, month=ops_spec.month, seed=1)
-                return d, ms, dl, annual_cost(cfg, F, L.k, dl, ops_spec.station_cap)
+                ms, dl = month_eval(L, F, cfg, DEM, month=ops_spec.month, seed=1, cal=CAL, **OPS_KW)
+                return ms, dl, annual_cost(cfg, F, L.k, dl, ops_spec.station_cap)
 
-            day_res, m_sum, daily, cost = evaluate(key)
-            result = day_res if ops_spec.period == "1日" else m_sum
+            m_sum, daily, cost = evaluate(key)
+            result = m_sum
 
 # ---------- 結果 ----------
 if result is not None:
-    period_txt = (f"1日（{day}・{ops_spec.weather}）× {ops_spec.n_rep}回の平均" if ops_spec.period == "1日"
-                  else f"{cfg['month']['year']}年{ops_spec.month}月の1か月（平日・休日・気象を含む）")
+    n_hol = int((CAL["曜日区分"] == "休日").sum())
+    period_txt = f"{ops_spec.year}年{ops_spec.month}月の1か月（平日{len(CAL) - n_hol}日・休日{n_hol}日、{SOURCE}）"
     st.subheader(f"結果（{period_txt}）")
     c1, c2, c3, c4 = st.columns(4)
     c1.metric("充足率", f"{result['充足率']:.1%}", help=f"貸出失敗率 {result['貸出失敗率']:.1%}（往路・復路の合計）")

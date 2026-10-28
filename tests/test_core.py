@@ -426,3 +426,33 @@ def test_pilot_grid_fixed_fleet():
     b = pilot_best(g)
     assert b["利用"] <= 10 * 2 + 1e-9                          # 10台×朝夕1往復で頭打ち（夜に初期配置へ戻す）
     assert b["断られた/日"] > 0
+
+
+def test_weather_data_actual_calendar(tmp_path):
+    from src.weather_data import actual_calendar, available_months, classify
+    th = CFG["weather_thresholds"]
+    assert classify({"降水量mm": 12, "最高気温": 20, "最低気温": 10, "最大風速": 3}, th) == "雨"
+    assert classify({"降水量mm": 0, "最高気温": 36, "最低気温": 25, "最大風速": 3}, th) == "猛暑"
+    assert classify({"降水量mm": 0.5, "最高気温": 8, "最低気温": -2, "最大風速": 4}, th) == "寒冷"
+    # Open-Meteo 形式の1か月分（2025年11月）
+    days = pd.date_range("2025-11-01", "2025-11-30")
+    pd.DataFrame({"time": days.strftime("%Y-%m-%d"), "precipitation_sum (mm)": [15.0] + [0.0] * 29,
+                  "temperature_2m_max (°C)": 18.0, "temperature_2m_min (°C)": 8.0,
+                  "wind_speed_10m_max (m/s)": 3.0}).to_csv(tmp_path / "w.csv", index=False)
+    c = {**CFG, "paths": {**CFG["paths"], "weather_daily": str(tmp_path / "w.csv")}}
+    assert available_months(c) == [(2025, 11)]
+    cal = actual_calendar(c, 2025, 11)
+    assert len(cal) == 30 and cal["気象"].iloc[0] == "雨" and (cal["気象"].iloc[1:] == "晴れ").all()
+    assert (cal["曜日区分"] == "休日").sum() == 12                  # 土日10日＋文化の日・勤労感謝の日の振替休日
+    assert actual_calendar(c, 2025, 10) is None
+
+
+def test_min_fleet_month_specs():
+    """1か月の暦（日ごとの運用条件・需要）で探す。需要の少ない休日が混ざると、平日だけより台数は増えない。"""
+    from src.study import min_fleet
+    out, ret = _dem(10.0, 10.0)
+    ops = _O()
+    specs = [(ops, out, ret)] * 5 + [(ops, out * 0.3, ret * 0.3)] * 2
+    a = min_fleet(_L(), ops, out, ret, targets=(0.05,), n_rep=70, seed=0)[0.05]
+    b = min_fleet(_L(), ops, out, ret, targets=(0.05,), n_rep=70, seed=0, day_specs=specs)[0.05]
+    assert b["合計"] <= a["合計"]
