@@ -51,9 +51,10 @@ def survey_path(cfg: dict) -> tuple[Path, bool]:
 
 
 def file_hash(*paths: Path) -> str:
+    """入力ファイルの指紋。改行コードの違い（Windows で取得したときの CRLF）は同じとみなす。"""
     h = hashlib.sha256()
     for p in paths:
-        h.update(Path(p).read_bytes())
+        h.update(Path(p).read_bytes().replace(b"\r\n", b"\n"))
     return h.hexdigest()[:16]
 
 

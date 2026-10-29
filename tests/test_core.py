@@ -456,3 +456,17 @@ def test_min_fleet_month_specs():
     a = min_fleet(_L(), ops, out, ret, targets=(0.05,), n_rep=70, seed=0)[0.05]
     b = min_fleet(_L(), ops, out, ret, targets=(0.05,), n_rep=70, seed=0, day_specs=specs)[0.05]
     assert b["合計"] <= a["合計"]
+
+
+def test_file_hash_ignores_crlf(tmp_path):
+    """Windows で取得して改行が CRLF になっても、事前計算の「住宅データが変わった」警告を出さない。"""
+    from src.loaders import file_hash
+    a, b = tmp_path / "a.geojson", tmp_path / "b.geojson"
+    a.write_bytes(b'{"type":"FeatureCollection",\n"features":[]}\n')
+    b.write_bytes(b'{"type":"FeatureCollection",\r\n"features":[]}\r\n')
+    assert file_hash(a) == file_hash(b)
+    net_meta = (ROOT / "data" / "processed" / "meta.json").read_text(encoding="utf-8")
+    from src.loaders import houses_path
+    paths, sample = houses_path(CFG)
+    if not sample:
+        assert file_hash(*paths) in net_meta                   # 記録済みの指紋と一致（警告が出ない）
