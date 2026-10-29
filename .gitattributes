@@ -1,0 +1,2 @@
+# Windows 用のバッチファイルは CRLF で取り出す（LF のままだと日本語の表示や動作が崩れることがある）
+*.bat text eol=crlf

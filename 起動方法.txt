@@ -36,3 +36,12 @@ python.org から Python 3.14 (macOS installer) をインストール →
 ・黒い画面のメッセージを確認（エラー内容が表示されます）
 ・別の番号（8502 など）で起動していたら、表示された Local URL を開く
 ・以前に別のバージョンでセットアップしていた場合や、やり直すとき：フォルダ内の .venv フォルダを削除して再度 start_windows.bat
+
+■ 最新版への更新（git を使う場合・おすすめ）
+1. 最初の1回だけ：Git を入れる → https://git-scm.com/download/win （設定はそのまま「Next」）
+   コマンドプロンプトで
+     cd C:\
+     git clone https://github.com/saigaeno-cmd/mikuri_sim.git
+   できた C:\mikuri_sim の start_windows.bat で起動（古いフォルダは不要）
+2. 以後は C:\mikuri_sim の「更新.bat」をダブルクリックするだけ
+   （最新版を取り込み、続けて起動するか聞かれます）

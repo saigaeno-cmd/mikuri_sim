@@ -11,6 +11,10 @@ streamlit run app.py                   # 画面（事前計算結果を読むだ
 ```
 Windows は `start_windows.bat`、Mac/Linux は `start_mac_linux.sh` でも起動できます（`起動方法.txt`）。
 
+### 最新版への更新（Windows）
+最初の1回だけ Git（https://git-scm.com/download/win）を入れ、`git clone https://github.com/saigaeno-cmd/mikuri_sim.git` で取得する。
+以後は `更新.bat` をダブルクリックすると最新版になる（続けて起動もできる）。
+
 ### 一括更新（全条件の計算 → 感度分析 → 追加検証 → 報告資料）
 ```bash
 python scripts/run_all.py                     # すべて（4コアで1時間前後）
