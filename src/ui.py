@@ -9,6 +9,7 @@ import numpy as np
 import streamlit as st
 
 from .demand import base_hourly, build_demand, dest_shares
+from .weather_data import month_specs  # noqa: F401（画面から使う）
 from .loaders import file_hash, houses_path, load_config, load_houses_all, load_network, load_survey, survey_path
 
 
@@ -213,27 +214,6 @@ def month_sidebar(cfg, key_prefix: str = ""):
     passes = st.select_slider("くり返し回数（1か月を何回分計算するか）", [1, 2, 3, 5], 2, key=f"{key_prefix}passes",
                               help="利用希望の発生は確率的なため、同じ1か月を乱数を変えて複数回計算し平均する。")
     return year, month, passes
-
-
-def month_specs(cfg, year: int, month: int, demand_by_daytype: dict, ops_kw: dict, seed: int = 0):
-    """1か月の暦（日付・曜日区分・気象）と、日ごとの（運用条件, 往路需要, 復路需要）の列。"""
-    from .engine import month_calendar
-    from .plan import make_ops
-    from .weather_data import actual_calendar
-    cal = actual_calendar(cfg, year, month)
-    source = "南栗橋の実際の天気"
-    if cal is None:
-        cal = month_calendar(year, month, cfg["month"].get(f"holidays_{year}", []), cfg["climate"][month],
-                             np.random.default_rng(seed + 7919))
-        source = "平年値から抽選した天気"
-    cache = {}
-    specs = []
-    for r in cal.itertuples(index=False):
-        if r.気象 not in cache:
-            cache[r.気象] = make_ops(cfg, weather=r.気象, **ops_kw)
-        oh, rh = demand_by_daytype[r.曜日区分]
-        specs.append((cache[r.気象], oh, rh))
-    return cal, specs, source
 
 
 def ops_sidebar(cfg, *, key_prefix: str = "", show_period: bool = True) -> OpsSpec:

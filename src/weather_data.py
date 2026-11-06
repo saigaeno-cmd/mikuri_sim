@@ -125,3 +125,23 @@ def actual_calendar(cfg, year: int, month: int) -> pd.DataFrame | None:
     m["曜日区分"] = [("休日" if dt.weekday() >= 5 or dt in hol else "平日") for dt in m["日付"]]
     m["気象"] = m.apply(lambda r: classify(r, th), axis=1)
     return m[["日付", "曜日区分", "気象", "降水量mm", "最高気温", "最低気温", "最大風速"]].reset_index(drop=True)
+
+
+def month_specs(cfg, year: int, month: int, demand_by_daytype: dict, ops_kw: dict, seed: int = 0):
+    """1か月の暦（日付・曜日区分・気象）と、日ごとの（運用条件, 往路需要, 復路需要）の列。"""
+    from .engine import month_calendar
+    from .plan import make_ops
+    cal = actual_calendar(cfg, year, month)
+    source = "南栗橋の実際の天気"
+    if cal is None:
+        cal = month_calendar(year, month, cfg["month"].get(f"holidays_{year}", []), cfg["climate"][month],
+                             np.random.default_rng(seed + 7919))
+        source = "平年値から抽選した天気"
+    cache = {}
+    specs = []
+    for r in cal.itertuples(index=False):
+        if r.気象 not in cache:
+            cache[r.気象] = make_ops(cfg, weather=r.気象, **ops_kw)
+        oh, rh = demand_by_daytype[r.曜日区分]
+        specs.append((cache[r.気象], oh, rh))
+    return cal, specs, source

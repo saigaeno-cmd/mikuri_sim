@@ -470,3 +470,22 @@ def test_file_hash_ignores_crlf(tmp_path):
     paths, sample = houses_path(CFG)
     if not sample:
         assert file_hash(*paths) in net_meta                   # 記録済みの指紋と一致（警告が出ない）
+
+
+def test_present_slides():
+    """発表スライド：③と④が同じ計算から作られ、目標の台数が一致する。6画面とPPTが作れる。"""
+    from src import present as pr
+    from src.loaders import load_survey, survey_path
+    net = _real_net()
+    c0 = {**CFG, "simulation": {**CFG["simulation"], "n_households": len(net.houses)}}
+    sv = load_survey(survey_path(c0)[0], c0)
+    c = pr.compute(net, c0, sv, conversion=0.1, year=2026, month=11, station_cap=25, substitution=True, k=2,
+                   target=0.8, passes=1)
+    row = c["curve"][np.isclose(c["curve"]["目標充足率"], 0.8)]
+    assert c["best"] and int(row["合計"].iloc[0]) == c["best"]["合計"]
+    figs = [pr.fig_area(c), pr.fig_demand(c), pr.fig_optimal(c), pr.fig_curve(c),
+            pr.fig_pilot(pd.DataFrame({"転換率": [0.05, 0.1], "利用": [10.0, 18.0], "断られた/日": [1.0, 5.0],
+                                       "充足率": [0.9, 0.78]}), 10, "条件"), pr.fig_sensitivity(None)]
+    pngs = [pr.to_png(f, dpi=40) for f in figs]
+    assert all(b[:8] == b"\x89PNG\r\n\x1a\n" for b in pngs)
+    assert pr.to_pptx(pngs)[:2] == b"PK"

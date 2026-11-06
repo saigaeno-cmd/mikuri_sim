@@ -6,6 +6,7 @@
 - ② ポート配置評価：地図でポートを選び、台数を指定して合計移動時間と充足率を算出
 - 実証（台数固定）：10台などの限られた台数で、転換率ごとの充足率・ポート数・車種の割合
 - 計算結果：全条件×10回・感度分析・追加検証の結果を条件で絞って表示
+- 発表スライド：修論発表などで投影する6画面（16:9）。PNG・PPTで保存
 - 設定：需要シナリオ・費用単価・駅ポート・運用ルール・街区・道路を画面から変更
 """
 import sys
@@ -22,6 +23,7 @@ nav = st.navigation([
     st.Page("views/evaluate.py", title="② ポート配置評価", icon="🗺️"),
     st.Page("views/pilot.py", title="実証（台数固定）", icon="🧪"),
     st.Page("views/results.py", title="計算結果", icon="📊"),
+    st.Page("views/present.py", title="発表スライド", icon="🎤"),
     st.Page("views/settings.py", title="設定", icon="⚙️"),
 ])
 nav.run()
