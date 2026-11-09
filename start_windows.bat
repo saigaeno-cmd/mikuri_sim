@@ -29,6 +29,12 @@ if not exist .venv\Scripts\python.exe (
     pause & exit /b 1
   )
 )
+rem 更新でライブラリが増えた場合に入れる（入っていれば数秒で終わる）
+echo ライブラリを確認中...
+.venv\Scripts\python -m pip install -q -r requirements.txt || (
+  echo [エラー] ライブラリのインストールに失敗しました。上のメッセージを確認してください。
+  pause & exit /b 1
+)
 echo.
 echo 起動中... 「You can now view your Streamlit app」と表示されたら、ブラウザで
 echo   http://localhost:8501   （開かない場合は http://127.0.0.1:8501 ）

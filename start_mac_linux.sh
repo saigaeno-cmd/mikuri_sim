@@ -11,5 +11,7 @@ if [ ! -x .venv/bin/python ]; then
   .venv/bin/python -m pip install --upgrade pip
   .venv/bin/python -m pip install -r requirements.txt || { echo "[エラー] インストール失敗。上のメッセージを確認してください"; rm -rf .venv; exit 1; }
 fi
+# 更新でライブラリが増えた場合に入れる（入っていれば数秒で終わる）
+.venv/bin/python -m pip install -q -r requirements.txt || { echo "[エラー] インストール失敗。上のメッセージを確認してください"; exit 1; }
 echo "起動中... 表示された Local URL（通常 http://localhost:8501 、開かなければ http://127.0.0.1:8501 ）を開いてください。終了は Ctrl+C"
 .venv/bin/python -m streamlit run app.py --browser.gatherUsageStats false
