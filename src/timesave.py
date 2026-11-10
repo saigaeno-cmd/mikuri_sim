@@ -1,7 +1,9 @@
 """時間短縮にもとづくポート最適化。
 
-「徒歩だけで行く」より「徒歩＋モビリティ（手続き・目的地側の徒歩を含む）」の方が X 分以上短くなる住宅は、
-その目的地へ必ず利用する（需要の量は転換率ではなく、この条件だけで決める）。
+需要が発生する条件（毎回の計算で A・X を指定）：
+- 住宅（出発地点）からポートまでの徒歩が A 分以内
+- 「徒歩だけで行く」より「徒歩＋モビリティ（手続き・目的地側の徒歩を含む）」の合計移動時間が X 分以上短くなる
+両方を満たす住宅は、その目的地へ必ず利用する（需要の量は転換率ではなく、この条件だけで決める）。
 - ポート位置：X 分以上短くなる住宅（目的地の割合で重み付け）が最も多くなる k か所（最大カバー問題、貪欲法＋入れ替え）
 - 需要：条件を満たす住宅が 1日 trips 往復（目的地は割合で按分）。時間帯の分布はアンケートの形を使う
 - 台数：この需要で、選んだ1か月の暦（平日・休日・天気）で目標を満たす最小台数（他のページと同じ探索）
@@ -26,6 +28,18 @@ def time_tensors(net, cfg, ebike_share: float, *, walk_kmh=None, procedure_sec=N
     walk_only = walk_alt_matrix(net, cfg) / vw                                  # (h, 2)
     mob = (net.W / vw)[:, :, None] + proc + (net.R[:, idx] / vr)[None, :, :] + (net.E[idx] / vw)[None, None, :]
     return walk_only, mob
+
+
+def access_time(net, cfg, *, walk_kmh=None) -> np.ndarray:
+    """(h, 候補) 住宅→ポート候補の徒歩（分）。"""
+    return net.W / kmh_to_m_per_min(walk_kmh or cfg["walk_speed_kmh"])
+
+
+def limit_access(mob, access, max_access_min):
+    """ポートまでの徒歩が max_access_min 分を超える（住宅, ポート）は使えない（所要時間を ∞ にする）。"""
+    if max_access_min is None:
+        return mob
+    return np.where((access <= max_access_min + 1e-9)[:, :, None], mob, np.inf)
 
 
 def coverage(walk_only, mob, S, threshold, share):
@@ -69,6 +83,7 @@ def layout_for(net, cfg, S, q, share, walk_only, mob, *, station_cap=None) -> tu
     k = len(S)
     w_hd = q * share                                                             # (h,2)
     w = w_hd.sum(1)
+    mob = np.where(np.isfinite(mob), mob, 1e6)                                  # 使えないポート（徒歩が遠い）
     cost = (mob[:, S, :] * np.where(w_hd.sum(1, keepdims=True) > 0, w_hd, share)[:, None, :]).sum(2)  # (h,k)
     assign = np.where(w > 0, cost.argmin(1), -1)
     idx = [net.dest_keys.index(d) for d in DESTS]

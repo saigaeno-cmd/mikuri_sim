@@ -577,3 +577,21 @@ def test_purpose_flows():
     F1 = type(F0)(np.vstack([F0.init, np.zeros((1, 2), int)]))
     b = simulate_days(L2, F1, ops, *pu.with_flows(oh, rh, {}, "休日"), n_rep=5, seed=3)
     assert a["充足率"] == b["充足率"] and a["平均移動時間(分/片道)"] == b["平均移動時間(分/片道)"]
+
+
+def test_timesave_access_limit():
+    """ポートまでの徒歩が A 分以内の住宅だけが対象。対象の住宅は A 分以内のポートに割り当てる。"""
+    from src import timesave as ts
+    net = _real_net()
+    wo, mob = ts.time_tensors(net, CFG, 0.6)
+    acc = ts.access_time(net, CFG)
+    share = np.array([0.7, 0.3])
+    for a in (1.0, 2.0):
+        m = ts.limit_access(mob, acc, a)
+        S = ts.solve_max_cover(wo, m, 3, 2.0, share)
+        q, saving = ts.coverage(wo, m, S, 2.0, share)
+        _, assign, _ = ts.layout_for(net, CFG, S, q, share, wo, m)
+        u = np.flatnonzero(assign >= 0)
+        assert len(u) == q.any(1).sum() > 0
+        assert (acc[u, np.array(S)[assign[u]]] <= a + 1e-9).all()
+        assert (saving[q] >= 2.0).all()
