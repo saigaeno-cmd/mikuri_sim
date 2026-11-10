@@ -489,3 +489,54 @@ def test_present_slides():
     pngs = [pr.to_png(f, dpi=40) for f in figs]
     assert all(b[:8] == b"\x89PNG\r\n\x1a\n" for b in pngs)
     assert pr.to_pptx(pngs)[:2] == b"PK"
+
+
+def test_timesave_max_cover():
+    """時間短縮：X 分以上短くなる住宅が最大のポート。X を大きくすると対象は減り、需要は対象住宅×往復数。"""
+    from src import timesave as ts
+    net = _real_net()
+    share = np.array([0.9, 0.1])
+    wo, mob = ts.time_tensors(net, CFG, 0.603)
+    covered = []
+    for x in (0.0, 2.0, 4.0):
+        S = ts.solve_max_cover(wo, mob, 3, x, share)
+        q, saving = ts.coverage(wo, mob, S, x, share)
+        assert (saving[q] >= x).all()
+        covered.append(int(q.any(1).sum()))
+        # 貪欲法＋入れ替えの結果は、どの1か所を入れ替えても良くならない
+        base = ts.objective(wo, mob, S, x, share)
+        for j in range(0, mob.shape[1], 7):
+            if j not in S:
+                assert ts.objective(wo, mob, [j] + S[1:], x, share) <= base
+    assert covered[0] >= covered[1] >= covered[2]
+    S = ts.solve_max_cover(wo, mob, 3, 2.0, share)
+    q, _ = ts.coverage(wo, mob, S, 2.0, share)
+    L, assign, w = ts.layout_for(net, CFG, S, q, share, wo, mob, station_cap=25)
+    assert L.k == 3 and abs(L.share.sum() - 1) < 1e-9 and ((assign >= 0) == q.any(1)).all()
+    from src.loaders import load_survey, survey_path
+    c = {**CFG, "simulation": {**CFG["simulation"], "n_households": len(net.houses)}}
+    sv = load_survey(survey_path(c)[0], c)
+    n = {"station": 50.0, "aeon": 5.0}
+    out, ret = ts.demand_for(sv, c, n, "平日")
+    assert abs(out[:, 0].sum() - 50) < 1e-6 and abs(out[:, 1].sum() - 5) < 1e-6 and abs(ret[:, 0].sum() - 50) < 1e-6
+
+
+def test_best_subsets_candidates():
+    """候補地から m か所：全組み合わせを比べ、充足率の高い順。配置可能台数を超えて置かない。"""
+    from src.candidates import best_subsets
+    from src.custom_ports import snap_ports
+    from src.loaders import load_survey, survey_path
+    from src.plan import demand_hourly, make_ops
+    net = _real_net()
+    c = {**CFG, "simulation": {**CFG["simulation"], "n_households": len(net.houses)}}
+    sv = load_survey(survey_path(c)[0], c)
+    oh, rh, sh = demand_hourly(sv, c, 0.1, c["survey_xlsx"]["default_modes"], "平日")
+    pts = net.candidates.iloc[[0, 10, 20, 30]][["lat", "lon"]].reset_index(drop=True)
+    pts["name"] = [f"候補{i}" for i in range(4)]
+    cands = snap_ports(net, pts).assign(収納=[2, 3, 4, 5])
+    df, method = best_subsets(net, c, cands, 2, 8, 0.6, sh, oh, rh, make_ops(c), 25, n_rep=10)
+    assert len(df) == 6 and method.startswith("全6通り")
+    assert (df["充足率"].diff().dropna() <= 1e-12).all()
+    for _, r in df.iterrows():
+        caps = cands["収納"].to_numpy()[list(r["_idx"])]
+        assert (r["_init"][:2].sum(1) <= caps).all()

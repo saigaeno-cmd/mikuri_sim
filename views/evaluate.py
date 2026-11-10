@@ -115,7 +115,7 @@ edited = st.data_editor(
                    "lon": st.column_config.NumberColumn("経度", format="%.6f"),
                    "自転車": st.column_config.NumberColumn("電動アシスト自転車（台）", min_value=0, step=1, format="%d"),
                    "キックボード": st.column_config.NumberColumn("電動キックボード（台）", min_value=0, step=1, format="%d"),
-                   "収納": st.column_config.NumberColumn("収納可能台数", min_value=1, step=1, format="%d",
+                   "収納": st.column_config.NumberColumn("配置可能台数（収納）", min_value=1, step=1, format="%d",
                                                         help="ポートに置ける最大台数（区画数）。満車なら返却失敗")})
 edited = edited.dropna(subset=["lat", "lon"]).reset_index(drop=True)
 for c in ("自転車", "キックボード"):
@@ -193,7 +193,7 @@ st.subheader("地図（クリックで住宅側ポートを追加）")
 n1, n2, n3, _ = st.columns([1, 1, 1, 1])
 new_b = n1.number_input("追加するポート：自転車", 0, 100, 3, key="ev2_newb")
 new_k = n2.number_input("追加するポート：キックボード", 0, 100, 2, key="ev2_newk")
-new_cap = n3.number_input("追加するポート：収納可能台数", 1, 200, DEFAULT_CAP, key="ev2_newcap",
+new_cap = n3.number_input("追加するポート：配置可能台数", 1, 200, DEFAULT_CAP, key="ev2_newcap",
                           help="ポートに置ける最大台数（区画数）。満車のポートには返却できません。")
 if result is not None:
     main = use.rename(columns={"name": "label"}).assign(
@@ -254,3 +254,53 @@ if result is not None:
                      .style.format({"円/年": "{:,.0f}"}), hide_index=True, use_container_width=True)
 else:
     st.info("地図をクリックするか、「最適配置を読み込む」「ファイルから読み込む」でポートを置いてください。")
+
+# ---------- 候補地から最良の組み合わせを選ぶ ----------
+st.divider()
+st.subheader("候補地から、充足率が最大になる組み合わせを選ぶ")
+st.caption("上の表を「候補地の一覧」とみなし（各地点の「配置可能台数」＝収納可能台数）、合計台数と使うポート数を決めて、"
+           "どの候補地を使えば充足率が最大になるかを比べます。台数は配置可能台数の範囲で自動配分（駅ポートを含む）。"
+           "比較は平日・晴れの1日×60日、選んだ組み合わせは「表に反映」すると上で1か月の評価ができます。")
+if edited.empty or not len(use):
+    st.info("先に地図のクリックなどで候補地を2か所以上置いてください。")
+else:
+    from src.candidates import best_subsets
+    if "ev2_cands" in ss:
+        st.info(f"表は組み合わせの結果を反映した状態です（候補地 {len(ss.ev2_cands)} か所）。")
+        if st.button("候補地の一覧に戻す"):
+            cands0 = ss.pop("ev2_cands")
+            set_ports(cands0)
+    cands = use[["name", "lat", "lon", "収納", "node", "snap_m"]].reset_index(drop=True)
+    g1, g2, g3 = st.columns([1, 1, 1.4])
+    n_total = g1.number_input("合計台数（自転車＋キックボード）", 1, 300, max(1, int(nb_tot + nk_tot)), key="ev2_cmb_n")
+    m_use = g2.number_input("使うポート数", 1, max(1, len(cands)), min(3, len(cands)), key="ev2_cmb_m")
+    with g3:
+        st.write("")
+        run = st.button("組み合わせを比較する", type="primary", use_container_width=True, disabled=len(cands) < 1)
+    cap_sum = int(cands["収納"].sum()) + int(ops_spec.station_cap)
+    if n_total > cap_sum:
+        st.warning(f"合計台数が、候補地すべての配置可能台数＋駅ポート（{cap_sum}台）を超えています。")
+    if run:
+        bar = st.progress(0.0, text="組み合わせを計算中…")
+        df, method = best_subsets(NET, cfg, cands, int(m_use), int(n_total), ops_spec.ebike_share, sh, oh, rh, ops,
+                                  ops_spec.station_cap, progress=lambda f: bar.progress(min(f, 1.0), text="組み合わせを計算中…"))
+        bar.empty()
+        ss.ev2_cmb = (df, method, int(n_total), int(m_use), tuple(cands["name"]))
+    if ss.get("ev2_cmb") and ss.ev2_cmb[4] == tuple(cands["name"]):
+        df, method, n_done, m_done, _ = ss.ev2_cmb
+        best = df.iloc[0]
+        st.success(f"最良：{best['使うポート']}（充足率 {best['充足率']:.1%}・平均移動時間 {best['平均移動時間(分/片道)']:.1f}分／片道）。{method}。")
+        if best["置けた台数"] < n_done:
+            st.warning(f"配置可能台数が足りず、{n_done}台のうち{best['置けた台数']}台しか置けませんでした。")
+        show = df.drop(columns=["_idx", "_init"]).head(20).copy()
+        show.insert(0, "順位", range(1, len(show) + 1))
+        st.dataframe(show.style.format({"充足率": "{:.1%}", "平均移動時間(分/片道)": "{:.1f}", "返却失敗率": "{:.1%}"}),
+                     hide_index=True, use_container_width=True)
+        if st.button("最良の組み合わせを表に反映（1か月で評価）"):
+            ss.ev2_cands = edited.copy()
+            idx = list(best["_idx"])
+            init = best["_init"]
+            chosen = cands.iloc[idx].reset_index(drop=True)
+            set_ports(pd.DataFrame({"name": chosen["name"], "lat": chosen["lat"], "lon": chosen["lon"],
+                                    "自転車": init[:len(idx), EB], "キックボード": init[:len(idx), KB],
+                                    "収納": chosen["収納"]}), station=(int(init[len(idx), EB]), int(init[len(idx), KB])))

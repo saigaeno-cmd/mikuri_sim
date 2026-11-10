@@ -159,9 +159,11 @@ def port_map(houses: pd.DataFrame, candidates: pd.DataFrame, main: pd.DataFrame,
     fg_h = folium.FeatureGroup(name=f"住宅（{main_name}への割当）")
     for r, a in zip(houses.itertuples(), assign):
         colored = color_houses and len(labels) > 0
+        use = colored and a >= 0                   # a < 0：利用しない住宅（時間短縮が足りない）
         folium.CircleMarker([r.lat, r.lon], radius=4, color="white", weight=1, fill=True,
-                            fill_color=SERIES[a % len(SERIES)] if colored else GRAY, fill_opacity=0.9,
-                            tooltip=f"住宅 {r.house_id}" + (f" → {labels[a]}" if colored else "")).add_to(fg_h)
+                            fill_color=SERIES[a % len(SERIES)] if use else GRAY, fill_opacity=0.9 if use else 0.6,
+                            tooltip=f"住宅 {r.house_id}" + (f" → {labels[a]}" if use else
+                                                           ("（利用しない）" if colored else ""))).add_to(fg_h)
     fg_h.add_to(m)
 
     fg_p = folium.FeatureGroup(name=main_name)
