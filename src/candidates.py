@@ -35,7 +35,9 @@ def evaluate_subset(net, cfg, cands: pd.DataFrame, idx, n_total, ebike_share, sh
             "充足率": r["充足率"], "平均移動時間(分/片道)": r["平均移動時間(分/片道)"], "返却失敗率": r["返却失敗率"],
             "置けた台数": placed, "駅ポート初期": int(F.init[L.k].sum()),
             "内訳": "・".join(f"{n}:自{F.init[j, EB]}キ{F.init[j, KB]}" for j, n in enumerate(sub["name"])),
-            "_init": F.init, "_用途別": r.get("_用途別", {})}
+            "合計移動時間(人・分/日)": r["合計移動時間(人・分/日)"],
+            "_init": F.init, "_用途別": r.get("_用途別", {}), "_hourly": r.get("_hourly", []),
+            "_peaks": r["ポート別最大駐車(95%点)"], "_assign": assign, "_caps": L.caps}
 
 
 def best_subsets(net, cfg, cands: pd.DataFrame, m: int, n_total: int, ebike_share, shares, oh, rh, ops,
