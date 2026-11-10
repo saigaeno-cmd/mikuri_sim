@@ -14,6 +14,8 @@
 電池：キックボードは走行距離だけ残量が減り、交換基準を下回ると一定時間（out_hours）貸出不可→満充電に戻る。
 リバランス：毎晩（終電後）初期配置に戻す（a）。b は 9:30、c はさらに 15:30 に在庫を調整する。
 移動時間：利用＝徒歩(自宅⇔ポート)＋手続き＋走行＋徒歩(ポート⇔施設)、貸出失敗＝徒歩のみ。
+用途別の追加の流れ（Layout.flows）：イオン⇔駅・公園⇔住宅・公園⇔駅など。需要は out_h の 3列目以降
+（列 2+i が flows[i] の出発の時間帯別期待値）。往復の流れは、着いてから滞在時間後に同じ車種を希望して戻る。
 """
 from __future__ import annotations
 
@@ -33,6 +35,21 @@ _ARR, _REB, _REQ = 0, 1, 2    # 同時刻の処理順：到着 → 作業 → �
 
 
 @dataclass
+class Flow:
+    """住宅⇔目的地（アンケート需要）以外の流れ。origin/dest はポート番号、-1 は住宅側（ポート j＝住宅割合で按分）。
+    距離は住宅側ポート j ごとの (k,) 配列（施設どうしの流れは同じ値を並べる）。"""
+    label: str
+    origin: int
+    dest: int
+    round_trip: bool
+    dwell_min: float
+    ride_m: np.ndarray         # (k,) 出発ポート→到着ポート
+    walk_o_m: np.ndarray       # (k,) 出発側：自宅／施設→ポート
+    walk_d_m: np.ndarray       # (k,) 到着側：ポート→施設／自宅
+    alt_m: np.ndarray          # (k,) 徒歩だけ
+
+
+@dataclass
 class Layout:
     """配置（距離は m）。walk/alt は各ポートに割り当てた住宅の平均。"""
     k: int
@@ -41,8 +58,21 @@ class Layout:
     ride_m: np.ndarray         # (k, 2) ポート→目的地ポート
     egress_m: np.ndarray       # (2,) 目的地ポート→施設
     alt_m: np.ndarray          # (k, 2) 徒歩のみで自宅→施設
-    caps: np.ndarray           # (k+2,) 収納可能台数（np.inf=制限なし）
+    caps: np.ndarray           # (k+2,) 収納可能台数（np.inf=制限なし）。公園ポートなどを足すと (k+3,) …
     labels: list = field(default_factory=list)
+    flows: list = field(default_factory=list)      # [Flow]
+
+    @property
+    def nport(self) -> int:
+        return len(self.caps)
+
+    def flow_weights(self, f: "Flow") -> np.ndarray:
+        """流れ f の住宅側ポート j への按分（住宅側の流れは住宅割合、施設どうしは j=0 に全量）。"""
+        if f.origin < 0 or f.dest < 0:
+            return self.share
+        w = np.zeros(self.k)
+        w[0] = 1.0
+        return w
 
 
 @dataclass
@@ -85,11 +115,12 @@ def _hourly_counts_need(L: Layout, ops, out_h, ret_h, n_samp: int, rng) -> np.nd
     戻り値 (n_samp, k+2, 2)。時間帯単位で、同じ時間帯の到着は出発に使えないとみなす（安全側）。"""
     k = L.k
     sp, ap = k, k + 1
+    npt = L.nport
     lam_t = [ops.mix[t] * ops.demand_mult[t] for t in (EB, KB)]
-    need = np.zeros((n_samp, k + 2, 2))
+    need = np.zeros((n_samp, npt, 2))
     for t in (EB, KB):
-        dep = np.zeros((n_samp, k + 2, 24))
-        arr = np.zeros((n_samp, k + 2, 24))
+        dep = np.zeros((n_samp, npt, 24))
+        arr = np.zeros((n_samp, npt, 24))
         for d, port in ((STATION, sp), (AEON, ap)):
             lam = L.share[:, None] * out_h[None, :, d] * lam_t[t]               # (k, 24)
             c = rng.poisson(lam, size=(n_samp,) + lam.shape)
@@ -103,8 +134,24 @@ def _hourly_counts_need(L: Layout, ops, out_h, ret_h, n_samp: int, rng) -> np.nd
             else:   # 往復：往路で乗った車両で戻るので、目的地側の在庫は要らない（街区側には夕方戻る）
                 w = ret_h[:, d] / ret_h[:, d].sum() if ret_h[:, d].sum() > 0 else np.zeros(24)
                 arr[:, :k] += c.sum(2)[:, :, None] * w[None, None, :]
+        for i, f in enumerate(L.flows):                                      # 用途別の流れ
+            if out_h.shape[1] <= 2 + i or out_h[:, 2 + i].sum() <= 0:
+                continue
+            lam = L.flow_weights(f)[:, None] * out_h[None, :, 2 + i] * lam_t[t]   # (k, 24)
+            c = rng.poisson(lam, size=(n_samp,) + lam.shape)
+            sh = int(math.ceil(f.dwell_min / 60)) if f.round_trip else None
+            for a, b, cc in ((f.origin, f.dest, c),) + (((f.dest, f.origin, np.roll(c, sh, 2) * (np.arange(24) >= sh)),)
+                                                        if f.round_trip else ()):
+                if a < 0:
+                    dep[:, :k] += cc
+                else:
+                    dep[:, a] += cc.sum(1)
+                if b < 0:
+                    arr[:, :k] += cc
+                else:
+                    arr[:, b] += cc.sum(1)
         cdep = np.cumsum(dep, 2)
-        carr = np.concatenate([np.zeros((n_samp, k + 2, 1)), np.cumsum(arr, 2)[:, :, :-1]], 2)
+        carr = np.concatenate([np.zeros((n_samp, npt, 1)), np.cumsum(arr, 2)[:, :, :-1]], 2)
         need[:, :, t] = np.maximum((cdep - carr).max(2), 0)
     return need
 
@@ -114,15 +161,17 @@ def allocate_fleet(L: Layout, ops, n_eb: int, n_kb: int, out_h, ret_h, n_samp: i
     各場所・車種の必要台数の分布 R に対し、「1台増やすと不足しなくなる確率 P(R ≥ s+1)」が最大の所へ1台ずつ配る
     （分離可能な凹関数の貪欲法）。駅ポートの容量は超えない。"""
     rng = np.random.default_rng(seed)
-    need = _hourly_counts_need(L, ops, out_h, ret_h, n_samp, rng)          # (n, k+2, 2)
-    init = np.zeros((L.k + 2, 2), dtype=int)
+    need = _hourly_counts_need(L, ops, out_h, ret_h, n_samp, rng)          # (n, nport, 2)
+    init = np.zeros((L.nport, 2), dtype=int)
+    # 置ける所：街区ポート・駅ポート＋用途別の流れが出発する施設ポート（イオン→駅 など）
+    places = list(range(L.k + 1)) + sorted({f.origin for f in L.flows if f.origin > L.k})
     left = {EB: int(n_eb), KB: int(n_kb)}
     while left[EB] + left[KB] > 0:
         best, best_gain = None, -1.0
         for t in (EB, KB):
             if left[t] == 0:
                 continue
-            for p in range(L.k + 1):                                       # モビリティステーションには置かない
+            for p in places:                                               # 用途が無ければモビリティステーションには置かない
                 if init[p].sum() >= L.caps[p]:
                     continue
                 g = float((need[:, p, t] >= init[p, t] + 1).mean())
@@ -162,7 +211,7 @@ def peak_outflow(out_h: np.ndarray, ret_h: np.ndarray) -> float:
 class _State:
     def __init__(self, layout: Layout, fleet: Fleet, ops: Ops, rng, soc0=None):
         self.L, self.O = layout, ops
-        self.nport = layout.k + 2
+        self.nport = layout.nport
         types, home = [], []
         for j in range(fleet.init.shape[0]):
             for t in (EB, KB):
@@ -233,6 +282,7 @@ class DayStats:
     port_fail: np.ndarray | None = None
     port_peak: np.ndarray | None = None       # ポートごとの最大駐車台数（用地＝区画数の算定に使う）
     swaps: int = 0
+    purpose: dict = field(default_factory=dict)   # 用途 -> [利用希望, 利用]（片道ごと）
 
 
 def _truck(ops: Ops, n_eb: int, n_kb: int) -> tuple[float, int]:
@@ -369,8 +419,8 @@ def simulate_day(layout: Layout, fleet: Fleet, ops: Ops, out_h: np.ndarray, ret_
     S.collect_pending = False
     # 前日からの充電待ちは時刻を1日分進める
     S.ready_at = np.maximum(S.ready_at - 24 * 60, 0)
-    st = DayStats(port_fail=np.zeros(L.k + 2))
-    st.port_peak = np.array([S.count(p) for p in range(L.k + 2)], dtype=float)
+    st = DayStats(port_fail=np.zeros(L.nport))
+    st.port_peak = np.array([S.count(p) for p in range(L.nport)], dtype=float)
     st.station_peak = S.count(L.k)
     k, sp, ap = L.k, L.k, L.k + 1
     dport = (sp, ap)
@@ -401,6 +451,16 @@ def simulate_day(layout: Layout, fleet: Fleet, ops: Ops, out_h: np.ndarray, ret_
             gen("out", np.outer(L.share, out_h[:, d] * lam_t[t]), d, t)                 # (k, 24)
             if O.trip_type[d] == "one_way":
                 gen("ret", np.outer(L.share, ret_h[:, d] * lam_t[t]), d, t)
+    for i, f in enumerate(L.flows):                                                    # 用途別の流れ
+        if out_h.shape[1] > 2 + i and out_h[:, 2 + i].sum() > 0:
+            for t in (EB, KB):
+                gen("fout", np.outer(L.flow_weights(f), out_h[:, 2 + i] * lam_t[t]), i, t)
+    pkey = [("住宅⇔駅", "住宅⇔イオン")[d] for d in (STATION, AEON)]
+
+    def tally(label, served):
+        r = st.purpose.setdefault(label, [0, 0])
+        r[0] += 1
+        r[1] += served
     if O.pattern in ("b", "c"):
         push(O.reb_times[0] * 60, _REB, ("reb", "b"))
     if O.pattern == "c":
@@ -448,14 +508,57 @@ def simulate_day(layout: Layout, fleet: Fleet, ops: Ops, out_h: np.ndarray, ret_
             minutes, trips = _truck(O, moved[EB], moved[KB])
             if minutes > 0:
                 st.ops.append((now / 60.0, sum(moved), minutes, trips))
-            for p in range(L.k + 2):
+            for p in range(L.nport):
                 st.port_peak[p] = max(st.port_peak[p], S.count(p))
             continue
         if kind == "reb":
             _rebalance(S, st, now, item[1], out_h, ret_h, lam_scale)
             st.station_peak = max(st.station_peak, S.count(sp))
-            for p in range(L.k + 2):
+            for p in range(L.nport):
                 st.port_peak[p] = max(st.port_peak[p], S.count(p))
+            continue
+        if kind in ("fout", "fret"):           # 用途別の流れ（d＝flows の番号）
+            _, j, i, t = item
+            f = L.flows[i]
+            a, b = (f.origin, f.dest) if kind == "fout" else (f.dest, f.origin)
+            pa, pb = (j if a < 0 else a), (j if b < 0 else b)
+            wa, wb = (f.walk_o_m[j], f.walk_d_m[j]) if kind == "fout" else (f.walk_d_m[j], f.walk_o_m[j])
+            h = min(int(now // 60), 23)
+            st.hourly[h, 0] += 1
+            st.legs += 1
+            st.req_out += kind == "fout"
+            st.req_ret += kind == "fret"
+            alt = f.alt_m[j] / vw
+            st.walk_only_min += alt
+            km = f.ride_m[j] / 1000
+            v, sub = rent(pa, t, now, km)
+            tally(f.label, v is not None)
+            if v is None:
+                st.fail_out += kind == "fout"
+                st.fail_ret += kind == "fret"
+                st.hourly[h, 2] += 1
+                st.time_min += alt
+                if kind == "fout" and f.round_trip:          # 帰りも徒歩
+                    st.legs += 1
+                    st.time_min += alt
+                    st.walk_only_min += alt
+                continue
+            st.served_out += kind == "fout"
+            st.served_ret += kind == "fret"
+            st.hourly[h, 1] += 1
+            st.substitutions += sub
+            st.rides_by_type[S.vtype[v]] += 1
+            ride = O.procedure_min + f.ride_m[j] / vr[S.vtype[v]]
+            st.time_min += wa / vw + ride + wb / vw
+            push(now + ride, _ARR, ("arr", v, pb, km))
+            if kind == "fout" and f.round_trip:
+                tr = now + ride + wb / vw + f.dwell_min * (0.5 + rng.random())    # 滞在：平均の0.5〜1.5倍
+                if tr < 24 * 60 - 1:
+                    push(tr, _REQ, ("fret", j, i, t))
+                else:
+                    st.legs += 1
+                    st.time_min += alt
+                    st.walk_only_min += alt
             continue
         _, j, d, t = item
         h = min(int(now // 60), 23)
@@ -467,6 +570,7 @@ def simulate_day(layout: Layout, fleet: Fleet, ops: Ops, out_h: np.ndarray, ret_
         if kind == "out":
             st.req_out += 1
             v, sub = rent(j, t, now, km)
+            tally(pkey[d], v is not None)
             if v is None:
                 st.fail_out += 1
                 st.hourly[h, 2] += 1
@@ -499,6 +603,7 @@ def simulate_day(layout: Layout, fleet: Fleet, ops: Ops, out_h: np.ndarray, ret_
         else:  # 復路の利用希望（目的地ポート → 自宅側ポート j）
             st.req_ret += 1
             v, sub = rent(dport[d], t, now, km)
+            tally(pkey[d], v is not None)
             if v is None:
                 st.fail_ret += 1
                 st.hourly[h, 2] += 1
@@ -524,6 +629,12 @@ def summarize(days: list[DayStats], fleet: Fleet) -> dict:
     ops = [o for d in days for o in d.ops]
     n_veh = max(sum(fleet.n), 1)
     peaks = np.array([d.port_peak for d in days]) if days else np.zeros((1, 1))
+    pur = {}
+    for d in days:
+        for lab, (q, s_) in d.purpose.items():
+            r = pur.setdefault(lab, [0, 0])
+            r[0] += q
+            r[1] += s_
     return {
         "日数": len(days),
         "ポート別最大駐車(95%点)": np.ceil(np.quantile(peaks, 0.95, axis=0)).astype(int).tolist(),
@@ -545,6 +656,8 @@ def summarize(days: list[DayStats], fleet: Fleet) -> dict:
         "電池交換/日": g("swaps") / n_days,
         "稼働率(回/台/日)": served / n_days / n_veh,
         "_hourly": (np.mean([d.hourly for d in days], axis=0).tolist() if days else []),
+        "_用途別": {lab: {"利用希望/日": q / n_days, "利用/日": s_ / n_days, "充足率": s_ / q if q else 1.0}
+                  for lab, (q, s_) in pur.items()},
     }
 
 

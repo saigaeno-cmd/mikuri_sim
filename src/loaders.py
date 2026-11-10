@@ -241,6 +241,8 @@ class Network:
     Wn: np.ndarray | None = None        # (n_houses, n_nodes) 住宅→全徒歩ノード 徒歩（-1=到達不能）
     Rn: np.ndarray | None = None        # (n_nodes, n_dest) 全徒歩ノード→目的地ポート 走行
     nodes: pd.DataFrame | None = None   # lat, lon, usable
+    DW: np.ndarray | None = None        # (n_dest, n_dest) 施設入口⇔施設入口 徒歩
+    DR: np.ndarray | None = None        # (n_dest, n_dest) 目的地ポート⇔目的地ポート 走行
 
     @property
     def districts(self) -> list[str]:
@@ -274,4 +276,6 @@ def load_network(cfg: dict) -> Network:
         Wn=m["Wn"] if "Wn" in m else None,
         Rn=m["Rn"] if "Rn" in m else None,
         nodes=pd.read_csv(d / "walk_nodes.csv") if (d / "walk_nodes.csv").exists() else None,
+        DW=m["DW"] if "DW" in m else None,
+        DR=m["DR"] if "DR" in m else None,
     )

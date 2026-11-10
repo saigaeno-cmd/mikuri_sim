@@ -218,6 +218,12 @@ def main():
     De = shortest(Aw, pe_ix)
     E = np.array([min(De[d, en_ix[i]] + en_off[i] for i in np.flatnonzero(ent_owner == d)) + pe_off[d]
                   for d in range(len(dest_keys))])
+    # 施設⇔施設の徒歩（入口どうしの最短。イオン⇔駅・公園⇔駅などの「徒歩だけ」の時間に使う）
+    Den = shortest(Aw, en_ix)
+    nd = len(dest_keys)
+    DW = np.array([[min(Den[i, en_ix[j]] + en_off[i] + en_off[j]
+                        for i in np.flatnonzero(ent_owner == a) for j in np.flatnonzero(ent_owner == b))
+                    for b in range(nd)] for a in range(nd)])
 
     # --- 走行ネットワーク（一方通行を考慮し、往路・復路の平均） ---
     _, blat, blon, Ab = graph_arrays(G_bike)
@@ -226,8 +232,11 @@ def main():
     out_d = shortest(Ab, cb_ix)[:, db_ix]
     back_d = shortest(Ab, db_ix)[:, cb_ix].T
     R = (out_d + back_d) / 2 + cb_off[:, None] + db_off[None, :]
+    dd = shortest(Ab, db_ix)[:, db_ix]                             # 目的地ポート⇔目的地ポートの走行
+    DR = (dd + dd.T) / 2 + db_off[:, None] + db_off[None, :]
+    np.fill_diagonal(DR, 0.0)
 
-    for name, M in (("W", W), ("R", R), ("E", E)):
+    for name, M in (("W", W), ("R", R), ("E", E), ("DW", DW), ("DR", DR)):
         if not np.isfinite(M).all():
             bad = int((~np.isfinite(M)).sum())
             raise RuntimeError(f"{name} に到達不能な組が {bad} 件あります。bbox_buffer_m を広げてください。")
@@ -241,7 +250,7 @@ def main():
     usable = np.isfinite(Wn).all(0) & np.isfinite(Rn).all(1)
     print(f"  添付ポート評価用: 徒歩ノード {usable.sum()}/{len(usable)} が到達可能")
 
-    np.savez_compressed(out / "matrices.npz", W=W, R=R, E=E,
+    np.savez_compressed(out / "matrices.npz", W=W, R=R, E=E, DW=DW, DR=DR,
                         Wn=np.where(np.isfinite(Wn), Wn, -1.0), Rn=np.where(np.isfinite(Rn), Rn, -1.0))
     pd.DataFrame({"lat": wlat, "lon": wlon, "usable": usable}).to_csv(out / "walk_nodes.csv", index=False)
     hs = houses.copy()

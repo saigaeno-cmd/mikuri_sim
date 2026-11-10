@@ -254,3 +254,38 @@ def ops_sidebar(cfg, *, key_prefix: str = "", show_period: bool = True) -> OpsSp
                                  format_func=lambda m: f"{m}月", key=f"{key_prefix}month")
     n_rep = st.select_slider("シミュレーション回数（1日モードの日数）", [20, 40, 60, 100, 200], 60, key=f"{key_prefix}nrep")
     return OpsSpec(es, sub, pattern, int(cap), float(proc), period, weather, int(month), int(n_rep))
+
+
+def purposes_sidebar(cfg, key_prefix: str = "") -> dict:
+    """利用用途 3〜5（イオン⇔駅・公園⇔住宅・公園⇔駅）の1日の回数・時間帯・滞在。src.purposes の spec を返す。"""
+    from .purposes import default_spec
+    spec = default_spec(cfg)
+    st.subheader("利用用途（3〜5）")
+    st.caption("1 住宅⇔駅・2 住宅⇔イオン は上のアンケート×転換率。3〜5 は1日の回数を入力します（初期値は仮の値）。")
+    a = spec.setdefault("aeon_station", {"per_day": {}, "hours": [10, 19]})
+    if st.checkbox("3 イオン⇔駅（両方向の片道・毎日）", True, key=f"{key_prefix}pu_as"):
+        c1, c2 = st.columns(2)
+        a["per_day"]["aeon_to_station"] = c1.number_input("イオン→駅（回/日）", 0.0, 100.0,
+                                                          float(a["per_day"].get("aeon_to_station", 2)), 0.5,
+                                                          key=f"{key_prefix}pu_a2s")
+        a["per_day"]["station_to_aeon"] = c2.number_input("駅→イオン（回/日）", 0.0, 100.0,
+                                                          float(a["per_day"].get("station_to_aeon", 2)), 0.5,
+                                                          key=f"{key_prefix}pu_s2a")
+        a["hours"] = list(st.slider("時間帯（イオン⇔駅）", 5, 24, tuple(a.get("hours", (10, 19))), 1,
+                                    format="%d時", key=f"{key_prefix}pu_ash"))
+    else:
+        a["per_day"] = {"aeon_to_station": 0.0, "station_to_aeon": 0.0}
+    for grp, lab, who in (("park_house", "4 公園⇔住宅（往復・休日のみ）", "街区全体の往復"),
+                          ("park_station", "5 公園⇔駅（往復・休日のみ）", "駅から公園への往復")):
+        g = spec.setdefault(grp, {"per_day": 0.0, "hours": [10, 16], "dwell_hours": 2.0})
+        if st.checkbox(lab, True, key=f"{key_prefix}pu_{grp}"):
+            g["per_day"] = st.number_input(f"{who}（往復/日）", 0.0, 100.0, float(g.get("per_day", 0)), 0.5,
+                                           key=f"{key_prefix}pu_{grp}_n")
+            c1, c2 = st.columns([3, 2])
+            g["hours"] = list(c1.slider("出発の時間帯", 6, 22, tuple(g.get("hours", (10, 16))), 1, format="%d時",
+                                        key=f"{key_prefix}pu_{grp}_h"))
+            g["dwell_hours"] = c2.number_input("滞在（時間）", 0.5, 8.0, float(g.get("dwell_hours", 2)), 0.5,
+                                               key=f"{key_prefix}pu_{grp}_d")
+        else:
+            g["per_day"] = 0.0
+    return spec

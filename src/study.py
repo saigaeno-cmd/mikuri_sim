@@ -162,11 +162,14 @@ def annual_cost(cfg, fleet: Fleet, k_house: int, daily: pd.DataFrame, station_ca
     n = nb + nk
     vehicle = (nb * c["price"]["ebike"] + nk * c["price"]["kickboard"]) * price_scale / c["life_years"]
     maintenance = n * c["maintenance"]
-    ports = (k_house + 2) * c["port_initial"] * port_scale / c["port_life_years"]
-    # 区画数：街区側＝初期台数と最大駐車の大きい方、駅＝容量、モビリティステーション＝最大駐車
-    peaks = np.array(daily["ポート別最大駐車(95%点)"].tolist()).max(0) if len(daily) else np.zeros(k_house + 2)
+    n_extra = max(fleet.init.shape[0] - (k_house + 2), 0)          # 公園ポートなど（用途別の流れ）
+    ports = (k_house + 2 + n_extra) * c["port_initial"] * port_scale / c["port_life_years"]
+    # 区画数：街区側＝初期台数と最大駐車の大きい方、駅＝容量、モビリティステーション・公園＝最大駐車
+    peaks = (np.array(daily["ポート別最大駐車(95%点)"].tolist()).max(0) if len(daily)
+             else np.zeros(fleet.init.shape[0]))
     house_slots = np.maximum(fleet.init[:k_house].sum(1), peaks[:k_house]).sum()
-    slots = int(house_slots + station_cap + max(peaks[k_house + 1], 1))
+    other = sum(max(max(peaks[p], fleet.init[p].sum()), 1) for p in range(k_house + 1, len(peaks)))
+    slots = int(house_slots + station_cap + other)
     land = slots * c["land_per_slot_month"] * 12
     if len(daily) >= 360:                      # 1年分の日別結果：そのまま合計（365日に換算）
         sc = 365 / len(daily)

@@ -194,8 +194,9 @@ def port_map(houses: pd.DataFrame, candidates: pd.DataFrame, main: pd.DataFrame,
         row = fleet_table[fleet_table["種別"] == key]
         info = f"{d['label']}：初期 {int(row['初期台数'].iloc[0])}台 / 必要区画 {int(row['必要区画'].iloc[0])}" if len(row) else d["label"]
         folium.Marker([d["port"]["lat"], d["port"]["lon"]], tooltip=info,
-                      icon=folium.Icon(color="darkblue" if key == "station" else "orange",
-                                       icon="train" if key == "station" else "shopping-cart", prefix="fa")).add_to(fg_d)
+                      icon=folium.Icon(color={"station": "darkblue", "park": "green"}.get(key, "orange"),
+                                       icon={"station": "train", "park": "tree"}.get(key, "shopping-cart"),
+                                       prefix="fa")).add_to(fg_d)
         cap_txt = ""
         if "収納" in fleet_table.columns and len(row):
             cv = row["収納"].iloc[0]
