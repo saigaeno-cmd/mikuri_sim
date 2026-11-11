@@ -17,7 +17,8 @@ from src.export import save_ports
 from src.loaders import ROOT
 from src.plan import custom_layout, demand_hourly, make_ops, optimal_layout
 from src.study import annual_cost, month_eval
-from src.ui import demand_sidebar, fresh_cfg, header_warnings, load_or_stop, month_specs, ops_sidebar, purposes_sidebar
+from src.ui import (demand_sidebar, fresh_cfg, header_warnings, hourly_fig, load_or_stop, month_specs, ops_sidebar,
+                    port_table, purposes_sidebar)
 from src.weather_data import weather_path
 
 BASE_CFG, SURVEY, NET, FLAGS, DATA_KEY = load_or_stop("eval")
@@ -87,33 +88,12 @@ def set_ports(df: pd.DataFrame, station=None, aeon=None):
     st.rerun()
 
 
-def port_table(names, caps_house, init, caps_all, k, peaks, assign) -> pd.DataFrame:
-    """ポートごとの表（住宅側＋駅・モビリティステーション・公園）。"""
-    dl = ["駅西口ポート", "モビリティステーション"] + (["公園ポート"] if len(caps_all) > k + 2 else [])
-    return pd.DataFrame({
-        "ポート": list(names) + dl,
-        "自転車": list(init[:, EB]), "キックボード": list(init[:, KB]),
-        "収納": [str(int(c_)) for c_ in caps_house] + [str(ops_spec.station_cap)]
-        + ["制限なし" if not np.isfinite(c_) else str(int(c_)) for c_ in caps_all[k + 1:]],
-        "最大駐車(95%点)": list(peaks[:len(caps_all)]),
-        "カバー戸数": [str(int(x)) for x in np.bincount(assign, minlength=k)] + ["—"] * len(dl)})
-
-
 def dest_table(init, k) -> pd.DataFrame:
     pc = cfg["destinations"].get(pu.PARK, {}).get("max_slots")
     return pd.DataFrame([("駅", "station", int(init[k].sum()), 0, ops_spec.station_cap),
                          ("モビリティステーション", "aeon", int(init[k + 1].sum()), 0, None)]
                         + ([("公園", pu.PARK, 0, 0, pc)] if USE_PU else []),
                         columns=["ポート", "種別", "初期台数", "必要区画", "収納"])
-
-
-def hourly_fig(hr):
-    hr = np.array(hr)
-    if not hr.size:
-        return None
-    fig = viz.hourly_service(pd.DataFrame({"時": np.arange(24), "利用希望": hr[:, 0], "利用": hr[:, 1]}))
-    fig.update_layout(height=300, margin=dict(t=40, b=10))
-    return fig
 
 
 def next_name(df) -> str:
@@ -301,7 +281,8 @@ with right:
         if fig_h is not None:
             st.plotly_chart(fig_h, use_container_width=True)
         st.markdown("**ポートごと**")
-        bp = port_table(use["name"], use["収納"], F.init, L.caps, L.k, result["ポート別最大駐車(95%点)"], assign)
+        bp = port_table(use["name"], use["収納"], F.init, L.caps, L.k, result["ポート別最大駐車(95%点)"], assign,
+                        ops_spec.station_cap)
         st.dataframe(bp, hide_index=True, use_container_width=True)
         st.caption("最大駐車が収納と同じなら、満車による返却失敗が起きています。")
         if st.button("この配置と結果を data/output に保存"):
@@ -419,7 +400,7 @@ else:
                 st.plotly_chart(fig_b, use_container_width=True, key="ev2_cmb_hourly")
             st.markdown("**ポートごと**")
             st.dataframe(port_table(chosen["name"], chosen["収納"], binit, best["_caps"], bk, best["_peaks"],
-                                    best["_assign"]), hide_index=True, use_container_width=True)
+                                    best["_assign"], ops_spec.station_cap), hide_index=True, use_container_width=True)
         with st.expander(f"組み合わせの比較（上位{min(20, len(df))}件）"):
             show = df.drop(columns=[c_ for c_ in df.columns if str(c_).startswith("_")]).head(20).copy()
             show.insert(0, "順位", range(1, len(show) + 1))

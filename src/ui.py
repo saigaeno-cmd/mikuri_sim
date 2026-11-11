@@ -289,3 +289,30 @@ def purposes_sidebar(cfg, key_prefix: str = "") -> dict:
         else:
             g["per_day"] = 0.0
     return spec
+
+
+def port_table(names, caps_house, init, caps_all, k, peaks, assign, station_cap):
+    """ポートごとの表（住宅側＋駅・モビリティステーション・公園）。assign の -1（利用しない住宅）は数えない。"""
+    import pandas as pd
+    from .engine import EB, KB
+    dl = ["駅西口ポート", "モビリティステーション"] + (["公園ポート"] if len(caps_all) > k + 2 else [])
+    a = np.asarray(assign)
+    cap_txt = lambda c: "制限なし" if c is None or not np.isfinite(float(c)) else str(int(c))  # noqa: E731
+    return pd.DataFrame({
+        "ポート": list(names) + dl,
+        "自転車": list(init[:, EB]), "キックボード": list(init[:, KB]),
+        "収納": [cap_txt(c) for c in caps_house] + [str(station_cap)] + [cap_txt(c) for c in caps_all[k + 1:]],
+        "最大駐車(95%点)": list(peaks[:len(caps_all)]),
+        "カバー戸数": [str(int(x)) for x in np.bincount(a[a >= 0], minlength=k)] + ["—"] * len(dl)})
+
+
+def hourly_fig(hr):
+    """時間帯別の利用希望と充足（結果レイアウトの右上）。"""
+    import pandas as pd
+    from . import viz
+    hr = np.array(hr)
+    if not hr.size:
+        return None
+    fig = viz.hourly_service(pd.DataFrame({"時": np.arange(24), "利用希望": hr[:, 0], "利用": hr[:, 1]}))
+    fig.update_layout(height=300, margin=dict(t=40, b=10))
+    return fig

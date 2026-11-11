@@ -15,7 +15,7 @@ from src.demand import DESTS
 from src.engine import EB, KB
 from src.plan import demand_hourly, fleet_for, make_ops
 from src.study import annual_cost, min_fleet, month_eval
-from src.ui import fresh_cfg, header_warnings, load_or_stop, month_specs, ops_sidebar
+from src.ui import fresh_cfg, header_warnings, hourly_fig, load_or_stop, month_specs, ops_sidebar, port_table
 from src.weather_data import weather_path
 
 BASE_CFG, SURVEY, NET, FLAGS, DATA_KEY = load_or_stop("opt_time")
@@ -139,30 +139,56 @@ if not ok:
     st.dataframe(cover_table(k, tuple(share), ops_spec.ebike_share, ops_spec.procedure_sec, A, DATA_KEY),
                  hide_index=True, use_container_width=True, height=260)
     st.stop()
-choice = st.radio("地図に出す案", [r["目標"] for r in ok], horizontal=True, key="ot_choice")
+choice = st.radio("表示する案（目標）", [r["目標"] for r in ok], horizontal=True, key="ot_choice")
 sel = next(r for r in ok if r["目標"] == choice)
 init, ms, daily, cost = evaluate(key, sel["自転車"], sel["キックボード"])
 
-c1, c2, c3, c4 = st.columns(4)
-c1.metric("台数", f"自{sel['自転車']}＋キ{sel['キックボード']}", help=f"合計 {sel['合計']} 台")
-c2.metric("充足率（1か月）", f"{ms['充足率']:.1%}")
-c3.metric("平均移動時間", f"{ms['平均移動時間(分/片道)']:.1f} 分/片道",
-          delta=f"{ms['平均移動時間(分/片道)'] - ms['全員徒歩の平均(分/片道)']:+.1f} 分（全員徒歩比）", delta_color="inverse")
-c4.metric("年間総費用", f"{cost['年間総費用'] / 1e4:,.0f} 万円")
+# ---------- 最適ポート配置（指標4つ → 左：ポート場所の地図／右：時間帯別・ポートごと） ----------
+st.subheader("最適ポート配置")
+st.caption(f"選んだ案：{choice}。計算期間：{ops_spec.year}年{ops_spec.month}月の1か月（{SOURCE}）。")
+k1, k2, k3, k4 = st.columns(4)
+k1.metric("ポート数", f"{L.k} か所", border=True, help="住宅側ポートの数（このほかに駅西口ポート・モビリティステーション）")
+k2.metric("設置台数", f"{sel['合計']} 台", border=True,
+          help=f"電動アシスト自転車{sel['自転車']}台＋電動キックボード{sel['キックボード']}台"
+               f"（うち駅ポート初期 {int(init[L.k].sum())}台）")
+k3.metric("充足率", f"{ms['充足率']:.1%}", border=True, help=f"貸出失敗率 {ms['貸出失敗率']:.1%}（往路・復路の合計）")
+k4.metric("合計移動時間（人・分/日）", f"{ms['合計移動時間(人・分/日)']:,.0f} 分", border=True,
+          delta=f"{ms['平均移動時間(分/片道)'] - ms['全員徒歩の平均(分/片道)']:+.1f} 分/片道（全員徒歩比）",
+          delta_color="inverse")
 
-# ---------- 地図 ----------
-st.markdown("**ポートの位置・初期台数（色つき＝対象の住宅、灰色＝ポートが遠い・短縮が足りず利用しない住宅）**")
-cand = NET.candidates.loc[S, ["lat", "lon"]].reset_index(drop=True)
-main = cand.assign(label=[f"P{j + 1}" for j in range(L.k)], 初期台数=init[:L.k].sum(1), 必要区画=init[:L.k].sum(1),
-                   内訳=[f"自{init[j, EB]}・キ{init[j, KB]}" for j in range(L.k)])
-dest_tbl = pd.DataFrame([("駅", "station", int(init[L.k].sum()), 0, ops_spec.station_cap),
-                         ("モビリティステーション", "aeon", 0, 0, None)], columns=["ポート", "種別", "初期台数", "必要区画", "収納"])
-m = viz.port_map(NET.houses, NET.candidates, main, assign, dest_tbl, cfg, main_name="時間短縮の最適ポート")
-st_folium(m, height=540, use_container_width=True, returned_objects=[], key="ot_map")
+left, right = st.columns([3, 2], gap="medium")
+with left:
+    st.subheader("ポート場所")
+    cand = NET.candidates.loc[S, ["lat", "lon"]].reset_index(drop=True)
+    main = cand.assign(label=[f"P{j + 1}" for j in range(L.k)], 初期台数=init[:L.k].sum(1), 必要区画=init[:L.k].sum(1),
+                       内訳=[f"自{init[j, EB]}・キ{init[j, KB]}" for j in range(L.k)])
+    dest_tbl = pd.DataFrame([("駅", "station", int(init[L.k].sum()), 0, ops_spec.station_cap),
+                             ("モビリティステーション", "aeon", 0, 0, None)],
+                            columns=["ポート", "種別", "初期台数", "必要区画", "収納"])
+    m = viz.port_map(NET.houses, NET.candidates.iloc[0:0], main, assign, dest_tbl, cfg,
+                     main_name="時間短縮の最適ポート", square=True)
+    st_folium(m, height=540, use_container_width=True, returned_objects=[], key="ot_map")
+    st.caption("色つき＝対象の住宅（色は使うポート）、灰色＝ポートが遠い・短縮が足りず利用しない住宅。"
+               "ラベル：自＝電動アシスト自転車、キ＝電動キックボードの初期台数。")
+with right:
+    st.markdown("**時間帯別の利用希望と充足**")
+    fig_h = hourly_fig(ms["_hourly"])
+    if fig_h is not None:
+        st.plotly_chart(fig_h, use_container_width=True)
+    st.markdown("**ポートごと**")
+    st.dataframe(port_table([f"P{j + 1}" for j in range(L.k)], [None] * L.k, init, L.caps, L.k,
+                            ms["ポート別最大駐車(95%点)"], assign, ops_spec.station_cap),
+                 hide_index=True, use_container_width=True)
+    st.caption("収納は住宅側ポートの区画を決めていないため「制限なし」。最大駐車が必要な区画数の目安です。")
 
-st.subheader(f"短くなる時間ごとの対象住宅（ポートまで{A:.1f}分以内・住宅側ポート数を固定して位置を選び直した場合）")
-ct = cover_table(k, tuple(share), ops_spec.ebike_share, ops_spec.procedure_sec, A, DATA_KEY)
-st.dataframe(ct.style.format({"短縮（分以上）": "{:.1f}", "1日の往復（目安）": "{:.1f}"}), hide_index=True,
-             use_container_width=True, height=260)
-st.caption(f"徒歩だけの平均：駅 {WO[:, 0].mean():.1f}分・イオン {WO[:, 1].mean():.1f}分。"
-           f"モビリティの時間には、手続き {ops_spec.procedure_sec:.0f}秒と、目的地ポートから施設までの徒歩を含みます。")
+with st.expander("詳細（年間費用・短くなる時間ごとの対象住宅）"):
+    d1, d2, d3 = st.columns(3)
+    d1.metric("年間総費用", f"{cost['年間総費用'] / 1e4:,.0f} 万円", help=f"1トリップあたり {cost['1トリップあたり費用']:,.0f} 円")
+    d2.metric("平均移動時間", f"{ms['平均移動時間(分/片道)']:.1f} 分/片道")
+    d3.metric("返却失敗率", f"{ms['返却失敗率']:.1%}")
+    st.markdown(f"**短くなる時間ごとの対象住宅（ポートまで{A:.1f}分以内・住宅側ポート数を固定して位置を選び直した場合）**")
+    ct = cover_table(k, tuple(share), ops_spec.ebike_share, ops_spec.procedure_sec, A, DATA_KEY)
+    st.dataframe(ct.style.format({"短縮（分以上）": "{:.1f}", "1日の往復（目安）": "{:.1f}"}), hide_index=True,
+                 use_container_width=True, height=260)
+    st.caption(f"徒歩だけの平均：駅 {WO[:, 0].mean():.1f}分・イオン {WO[:, 1].mean():.1f}分。"
+               f"モビリティの時間には、手続き {ops_spec.procedure_sec:.0f}秒と、目的地ポートから施設までの徒歩を含みます。")
