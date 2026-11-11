@@ -92,8 +92,18 @@ def custom_layout(net: Network, cfg, ports: pd.DataFrame, shares, ebike_share: f
     return _layout_from(net, cfg, W, R, E, assign, Walt, caps, station_cap, labels), assign
 
 
+def route_kmh(cfg, weather: str | None = None) -> tuple:
+    """経路別の実測速度 [目的地(DESTS順)][往路,復路][自転車,キックボード]（km/h、気象の倍率込み）。"""
+    rs = cfg["route_speeds"]
+    m = ((get_weather(cfg, weather, "ebike").ride, get_weather(cfg, weather, "kickboard").ride) if weather
+         else (1.0, 1.0))
+    return tuple(tuple((rs["ebike"][d][leg] * m[0], rs["kickboard"][d][leg] * m[1]) for leg in ("out", "ret"))
+                 for d in DESTS)
+
+
 def make_ops(cfg, *, weather="晴れ", pattern="a", substitution=None, ebike_share=None, procedure_sec=None,
-             walk_kmh=None, nightly_charge=None, station_buffer_q="cfg", full_return=None) -> Ops:
+             walk_kmh=None, nightly_charge=None, station_buffer_q="cfg", full_return=None,
+             route_speeds=False) -> Ops:
     fm = cfg["fleet_mix"]
     es = fm["ebike_share"] if ebike_share is None else ebike_share
     w_eb, w_kb = get_weather(cfg, weather, "ebike"), get_weather(cfg, weather, "kickboard")
@@ -114,6 +124,7 @@ def make_ops(cfg, *, weather="晴れ", pattern="a", substitution=None, ebike_sha
         station_buffer_q=rb.get("station_buffer_q") if station_buffer_q == "cfg" else station_buffer_q,
         full_return=rb.get("full_return", "outside") if full_return is None else full_return,
         collect_delay_min=rb.get("collect_delay_min", 60),
+        route_kmh=route_kmh(cfg, weather) if route_speeds else None,
     )
 
 

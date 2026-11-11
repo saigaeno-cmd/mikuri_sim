@@ -101,7 +101,8 @@ def min_fleet(L: Layout, ops: Ops, out_h, ret_h, targets=(0.05, 0.01, 0.20), n_r
 
 # ---------------------------------------------------------------- 1か月
 def month_eval(L: Layout, fleet: Fleet, cfg, demand_by_daytype: dict, *, pattern="a", substitution=None,
-               ebike_share=None, procedure_sec=None, walk_kmh=None, month=None, seed=0, cal=None):
+               ebike_share=None, procedure_sec=None, walk_kmh=None, month=None, seed=0, cal=None,
+               route_speeds=False):
     """demand_by_daytype: {"平日": (out_h, ret_h), "休日": (...)}（気象補正前）。
     cal（日付・曜日区分・気象）を渡せばその暦（実際の天気）で、無ければ気象を月の平年出現日数から日ごとに抽選。"""
     mcfg = cfg["month"]
@@ -114,7 +115,8 @@ def month_eval(L: Layout, fleet: Fleet, cfg, demand_by_daytype: dict, *, pattern
     def ops_for(w):
         if w not in ops_cache:
             ops_cache[w] = make_ops(cfg, weather=w, pattern=pattern, substitution=substitution,
-                                    ebike_share=ebike_share, procedure_sec=procedure_sec, walk_kmh=walk_kmh)
+                                    ebike_share=ebike_share, procedure_sec=procedure_sec, walk_kmh=walk_kmh,
+                                    route_speeds=route_speeds)
         return ops_cache[w]
 
     summary, daily, days = simulate_month(L, fleet, ops_for, lambda dt, w: demand_by_daytype[dt], cal, seed=seed,

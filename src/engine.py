@@ -98,6 +98,7 @@ class Ops:
     station_buffer_q: float | None = None   # 駅に残す台数：None＝期待値＋1台、数値＝ポアソン分布のその分位点
     full_return: str = "outside"            # 満車で返せないとき："outside"＝区画外に置き次の作業で回収／"collect"＝運営者が回収に出る
     collect_delay_min: float = 60.0         # "collect" のとき、最初の返却失敗から回収するまでの分
+    route_kmh: tuple | None = None          # 経路別の速度 [目的地][0=往路,1=復路][車種]（None＝ride_kmh を一律に使う）
 
 
 @dataclass
@@ -426,6 +427,11 @@ def simulate_day(layout: Layout, fleet: Fleet, ops: Ops, out_h: np.ndarray, ret_
     dport = (sp, ap)
     vw = O.walk_kmh * 1000 / 60
     vr = [x * 1000 / 60 for x in O.ride_kmh]
+    vroute = None if O.route_kmh is None else [[[x * 1000 / 60 for x in leg] for leg in d_] for d_ in O.route_kmh]
+
+    def speed(d, leg, t):
+        """目的地 d・往路(0)/復路(1)・車種 t の走行速度（m/分）。"""
+        return vr[t] if vroute is None else vroute[d][leg][t]
     lam_t = [O.mix[t] * O.demand_mult[t] for t in (EB, KB)]
     lam_scale = sum(lam_t)
     ev, seq = [], 0
@@ -584,7 +590,7 @@ def simulate_day(layout: Layout, fleet: Fleet, ops: Ops, out_h: np.ndarray, ret_
             st.hourly[h, 1] += 1
             st.substitutions += sub
             st.rides_by_type[S.vtype[v]] += 1
-            ride = O.procedure_min + L.ride_m[j, d] / vr[S.vtype[v]]
+            ride = O.procedure_min + L.ride_m[j, d] / speed(d, 0, S.vtype[v])
             st.time_min += L.walk_m[j] / vw + ride + L.egress_m[d] / vw
             push(now + ride, _ARR, ("arr", v, dport[d], km))
             if O.trip_type[d] == "round_trip":
@@ -613,7 +619,7 @@ def simulate_day(layout: Layout, fleet: Fleet, ops: Ops, out_h: np.ndarray, ret_
             st.hourly[h, 1] += 1
             st.substitutions += sub
             st.rides_by_type[S.vtype[v]] += 1
-            ride = O.procedure_min + L.ride_m[j, d] / vr[S.vtype[v]]
+            ride = O.procedure_min + L.ride_m[j, d] / speed(d, 1, S.vtype[v])
             st.time_min += L.egress_m[d] / vw + ride + L.walk_m[j] / vw
             push(now + ride, _ARR, ("arr", v, j, km))
     _night_reset(S, st)

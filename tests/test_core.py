@@ -595,3 +595,17 @@ def test_timesave_access_limit():
         assert len(u) == q.any(1).sum() > 0
         assert (acc[u, np.array(S)[assign[u]]] <= a + 1e-9).all()
         assert (saving[q] >= 2.0).all()
+
+
+def test_route_speeds():
+    """経路別の実測速度：住宅→駅は一律より遅く（10.4/14.1）、駅→住宅は速い。①の時間とエンジンの移動時間に反映。"""
+    from src import timesave as ts
+    from src.plan import make_ops, route_kmh
+    rk = route_kmh(CFG)
+    assert rk[0][0] == (10.9, 14.1) and rk[0][1] == (16.0, 13.9)
+    net = _real_net()
+    wo, m0 = ts.time_tensors(net, CFG, 0.6)
+    _, m1 = ts.time_tensors(net, CFG, 0.6, route_speeds=True)
+    assert (m1[:, :, 0] > m0[:, :, 0]).all()                     # 住宅→駅は一律より遅い
+    o = make_ops(CFG, route_speeds=True)
+    assert o.route_kmh is not None and make_ops(CFG).route_kmh is None

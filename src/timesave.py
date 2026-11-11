@@ -18,15 +18,25 @@ from .plan import demand_hourly, dest_caps, mix_ride_kmh, walk_alt_matrix
 from .location import kmh_to_m_per_min
 
 
-def time_tensors(net, cfg, ebike_share: float, *, walk_kmh=None, procedure_sec=None):
-    """(徒歩だけの時間 (h,2), モビリティを使う時間 (h,候補,2)) 分。"""
+def ride_speeds(cfg, ebike_share: float, route_speeds: bool = False) -> np.ndarray:
+    """(2,) 目的地ごとの往路の実効走行速度（km/h、車種比率で所要時間を加重平均）。
+    route_speeds=True：経路別の実測速度（config route_speeds）、False：車種ごとの一律の速度。"""
+    if not route_speeds:
+        return np.full(len(DESTS), mix_ride_kmh(cfg, ebike_share))
+    rs = cfg["route_speeds"]
+    return np.array([1.0 / (ebike_share / rs["ebike"][d]["out"] + (1 - ebike_share) / rs["kickboard"][d]["out"])
+                     for d in DESTS])
+
+
+def time_tensors(net, cfg, ebike_share: float, *, walk_kmh=None, procedure_sec=None, route_speeds=False):
+    """(徒歩だけの時間 (h,2), モビリティを使う時間 (h,候補,2)) 分。モビリティは住宅→施設（往路）の時間。"""
     walk_kmh = walk_kmh or cfg["walk_speed_kmh"]
     proc = (cfg["procedure_sec"] if procedure_sec is None else procedure_sec) / 60
     vw = kmh_to_m_per_min(walk_kmh)
-    vr = kmh_to_m_per_min(mix_ride_kmh(cfg, ebike_share))
+    vr = kmh_to_m_per_min(ride_speeds(cfg, ebike_share, route_speeds))          # (2,)
     idx = [net.dest_keys.index(d) for d in DESTS]
     walk_only = walk_alt_matrix(net, cfg) / vw                                  # (h, 2)
-    mob = (net.W / vw)[:, :, None] + proc + (net.R[:, idx] / vr)[None, :, :] + (net.E[idx] / vw)[None, None, :]
+    mob = (net.W / vw)[:, :, None] + proc + (net.R[:, idx] / vr[None, :])[None, :, :] + (net.E[idx] / vw)[None, None, :]
     return walk_only, mob
 
 

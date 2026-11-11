@@ -31,6 +31,18 @@ with st.sidebar:
     X = st.slider("② 短くなる時間（分以上）", 0.0, 10.0, 4.0, 0.5, key="ot_x", format="%.1f分",
                   help="出発地点から到着地点までの合計移動時間（自宅→ポートの徒歩＋手続き＋走行＋ポート→施設の徒歩）が、"
                        "徒歩だけより、この時間以上短くなること。①②を両方満たす住宅は必ず利用するとみなします。")
+    st.subheader("走行速度")
+    RS = st.radio("走行経路ごとの速度", ["経路別（実測）", "一律（車種ごと）"], key="ot_rs",
+                  help="経路別：実測の走行データ（data/raw/ride_logs/speed_summary.csv）から、住宅⇔駅・住宅⇔イオンごと、"
+                       "行き・帰りごとに速度を分ける。一律：車種ごとの平均速度（自転車"
+                       f"{cfg['vehicles']['ebike']['speed_kmh']}・キックボード{cfg['vehicles']['kickboard']['speed_kmh']} km/h）"
+                  ).startswith("経路別")
+    if RS:
+        _rs = cfg["route_speeds"]
+        st.caption("km/h（停止込み）　行き／帰り\n\n"
+                   + "\n\n".join(f"{lab}：自転車 {_rs['ebike'][d]['out']}／{_rs['ebike'][d]['ret']}・"
+                                   f"キックボード {_rs['kickboard'][d]['out']}／{_rs['kickboard'][d]['ret']}"
+                                   for d, lab in (("station", "住宅⇔駅"), ("aeon", "住宅⇔イオン"))))
     trips = st.number_input("対象住宅の利用（1日あたり往復）", 0.5, 5.0, 1.0, 0.5, key="ot_trips")
     st_share = st.slider("行き先：駅の割合", 0, 100, int(round(SH_SURVEY[0] * 100)), 1, format="%d%%", key="ot_share",
                          help="初期値はアンケート（トリップ加重）。残りはモビリティステーション（イオン）。") / 100
@@ -48,13 +60,13 @@ st.caption(f"需要が発生する条件：① 住宅からポートまでの徒
            "目標を満たす最小台数を探します。")
 header_warnings(NET, FLAGS)
 
-WO, MOB_ALL = ts.time_tensors(NET, cfg, ops_spec.ebike_share, procedure_sec=ops_spec.procedure_sec)
+WO, MOB_ALL = ts.time_tensors(NET, cfg, ops_spec.ebike_share, procedure_sec=ops_spec.procedure_sec, route_speeds=RS)
 ACC = ts.access_time(NET, cfg)
 MOB = ts.limit_access(MOB_ALL, ACC, A)
 
 
 @st.cache_data(show_spinner=False)
-def cover_table(k, share_t, es, proc, a, data_key):
+def cover_table(k, share_t, es, proc, a, rs, data_key):
     rows = []
     for x in np.arange(0, 10.5, 0.5):
         S = ts.solve_max_cover(WO, MOB, k, x, np.array(share_t))
@@ -81,7 +93,7 @@ c3.metric("短縮時間（対象の平均）", f"{sv_q.mean():.1f} 分" if sv_q.
 if sum(n_trip.values()) <= 0:
     st.warning(f"ポートまで{A:.1f}分以内で、かつ{X:.1f}分以上短くなる住宅がありません。"
                "ポートまでの徒歩を大きくするか、短くなる時間を小さくしてください（下の表で目安を確認できます）。")
-    st.dataframe(cover_table(k, tuple(share), ops_spec.ebike_share, ops_spec.procedure_sec, A, DATA_KEY),
+    st.dataframe(cover_table(k, tuple(share), ops_spec.ebike_share, ops_spec.procedure_sec, A, RS, DATA_KEY),
                  hide_index=True, use_container_width=True)
     st.stop()
 
@@ -90,13 +102,13 @@ oh_wd, rh_wd = ts.demand_for(SURVEY, cfg, {k_: v for k_, v in n_trip.items()}, "
 oh_hd, rh_hd = ts.demand_for(SURVEY, cfg, {k_: v for k_, v in n_trip.items()}, "休日")
 DEM = {"平日": (oh_wd, rh_wd), "休日": (oh_hd, rh_hd)}
 OPS_KW = dict(pattern=ops_spec.pattern, substitution=ops_spec.substitution, ebike_share=ops_spec.ebike_share,
-              procedure_sec=ops_spec.procedure_sec)
+              procedure_sec=ops_spec.procedure_sec, route_speeds=RS)
 CAL, SPECS, SOURCE = month_specs(cfg, ops_spec.year, ops_spec.month, DEM, OPS_KW)
 N_REP = len(SPECS) * ops_spec.n_rep
 _wp = weather_path(cfg)
 WKEY = f"{_wp.stat().st_mtime if _wp.exists() else 0}"
 targets = tuple(sorted({round(1 - target_f, 4), 0.05, 0.01}, reverse=True))
-key = json.dumps([A, X, trips, list(share), k, S, ops_spec.key(), DATA_KEY, WKEY, targets], default=str)
+key = json.dumps([RS, A, X, trips, list(share), k, S, ops_spec.key(), DATA_KEY, WKEY, targets], default=str)
 
 
 @st.cache_data(show_spinner="最小台数を探索中…（対象の住宅が多いと数分かかります）")
@@ -136,7 +148,7 @@ if need_st > ops_spec.station_cap:
 ok = [r for r in rows if r["合計"] is not None]
 if not ok:
     st.error("どの目標も達成できません（探索した台数の範囲内）。")
-    st.dataframe(cover_table(k, tuple(share), ops_spec.ebike_share, ops_spec.procedure_sec, A, DATA_KEY),
+    st.dataframe(cover_table(k, tuple(share), ops_spec.ebike_share, ops_spec.procedure_sec, A, RS, DATA_KEY),
                  hide_index=True, use_container_width=True, height=260)
     st.stop()
 choice = st.radio("表示する案（目標）", [r["目標"] for r in ok], horizontal=True, key="ot_choice")
@@ -187,8 +199,10 @@ with st.expander("詳細（年間費用・短くなる時間ごとの対象住�
     d2.metric("平均移動時間", f"{ms['平均移動時間(分/片道)']:.1f} 分/片道")
     d3.metric("返却失敗率", f"{ms['返却失敗率']:.1%}")
     st.markdown(f"**短くなる時間ごとの対象住宅（ポートまで{A:.1f}分以内・住宅側ポート数を固定して位置を選び直した場合）**")
-    ct = cover_table(k, tuple(share), ops_spec.ebike_share, ops_spec.procedure_sec, A, DATA_KEY)
+    ct = cover_table(k, tuple(share), ops_spec.ebike_share, ops_spec.procedure_sec, A, RS, DATA_KEY)
     st.dataframe(ct.style.format({"短縮（分以上）": "{:.1f}", "1日の往復（目安）": "{:.1f}"}), hide_index=True,
                  use_container_width=True, height=260)
-    st.caption(f"徒歩だけの平均：駅 {WO[:, 0].mean():.1f}分・イオン {WO[:, 1].mean():.1f}分。"
+    _v = ts.ride_speeds(cfg, ops_spec.ebike_share, RS)
+    st.caption(f"走行速度（{'経路別・実測' if RS else '一律'}、車種比率で加重した行き）：駅 {_v[0]:.1f}・イオン {_v[1]:.1f} km/h。"
+               f"徒歩だけの平均：駅 {WO[:, 0].mean():.1f}分・イオン {WO[:, 1].mean():.1f}分。"
                f"モビリティの時間には、手続き {ops_spec.procedure_sec:.0f}秒と、目的地ポートから施設までの徒歩を含みます。")
