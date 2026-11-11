@@ -90,6 +90,7 @@ with t2:
     v = {}
     v["eb"] = a.number_input("電動アシスト自転車 単価（円/台）", 0, 2_000_000, int(c["price"]["ebike"]), 10000)
     v["kb"] = b.number_input("電動キックボード 単価（円/台）", 0, 2_000_000, int(c["price"]["kickboard"]), 10000)
+    v["tr"] = a.number_input("4輪小型モビリティ 単価（円/台）", 0, 5_000_000, int(c["price"].get("trans", 450000)), 10000)
     v["life"] = a.number_input("車両の償却年数（年）", 1, 15, int(c["life_years"]))
     v["mnt"] = b.number_input("車両の維持費（円/台/年）", 0, 500_000, int(c["maintenance"]), 1000)
     v["port"] = a.number_input("ポート初期費用（円/か所）", 0, 10_000_000, int(c["port_initial"]), 10000)
@@ -100,7 +101,7 @@ with t2:
     v["swap"] = b.number_input("電池交換の作業（分/回）", 0, 120,
                                int(doc["battery"]["kickboard"].get("swap_work_min", 0) or 0))
     if st.button("費用単価を保存", key="save_cost"):
-        c["price"]["ebike"], c["price"]["kickboard"] = int(v["eb"]), int(v["kb"])
+        c["price"]["ebike"], c["price"]["kickboard"], c["price"]["trans"] = int(v["eb"]), int(v["kb"]), int(v["tr"])
         c["life_years"], c["maintenance"] = int(v["life"]), int(v["mnt"])
         c["port_initial"], c["port_life_years"] = int(v["port"]), int(v["plife"])
         c["land_per_slot_month"], c["labor_per_hour"], c["truck_per_op"] = int(v["land"]), int(v["labor"]), int(v["truck"])
@@ -128,7 +129,13 @@ with t4:
     fm, rb = doc["fleet_mix"], doc["rebalance"]
     sub = st.radio("希望車種が無いとき", ["(ii) 他の車種があれば乗り、無ければ徒歩", "(i) 徒歩"],
                    index=0 if fm["substitution"] else 1)
-    es = st.slider("電動アシスト自転車を希望する人の割合（%）", 0, 100, int(round(float(fm["ebike_share"]) * 100)))
+    from src.plan import default_mix
+    dm = default_mix(doc)
+    st.markdown("希望する車種の割合（%）")
+    m1, m2, m3 = st.columns(3)
+    es = m1.number_input("電動アシスト自転車", 0, 100, round(dm[0] * 100), 5)
+    ks_ = m2.number_input("電動キックボード", 0, 100, round(dm[1] * 100), 5)
+    m3.metric("4輪小型モビリティ（残り）", f"{100 - es - ks_}%")
     fr = st.radio("満車で返せない車両の扱い", ["区画外に置き、次の作業で回収", "運営者が回収に出る"],
                   index=0 if rb.get("full_return", "outside") == "outside" else 1)
     cd = st.number_input("運営者が回収に出るまで（分）", 5, 600, int(rb.get("collect_delay_min", 60)), 5)
@@ -144,7 +151,12 @@ with t4:
     outh = b3.number_input("交換・充電で使えない時間（時間）", 0.0, 24.0, float(bk["out_hours"]), 0.5)
     if st.button("運用・行動を保存", key="save_ops"):
         fm["substitution"] = sub.startswith("(ii)")
-        fm["ebike_share"] = round(es / 100, 3)
+        if es + ks_ > 100:
+            st.error("自転車とキックボードの合計が100%を超えています。")
+            st.stop()
+        fm.pop("ebike_share", None)
+        fm["shares"] = {"ebike": round(es / 100, 3), "kickboard": round(ks_ / 100, 3),
+                        "trans": round((100 - es - ks_) / 100, 3)}
         rb["full_return"] = "outside" if fr.startswith("区画外") else "collect"
         rb["collect_delay_min"] = int(cd)
         if "behavior" not in doc:

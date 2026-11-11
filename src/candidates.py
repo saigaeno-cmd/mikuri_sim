@@ -8,8 +8,8 @@ import pandas as pd
 
 import numpy as np
 
-from .engine import EB, KB, allocate_fleet, simulate_day, simulate_days, summarize
-from .plan import custom_layout
+from .engine import EB, KB, allocate_fleet, fleet_label, simulate_day, simulate_days, summarize
+from .plan import custom_layout, split_total
 
 
 def evaluate_subset(net, cfg, cands: pd.DataFrame, idx, n_total, ebike_share, shares, oh, rh, ops, station_cap,
@@ -22,8 +22,8 @@ def evaluate_subset(net, cfg, cands: pd.DataFrame, idx, n_total, ebike_share, sh
     if pspec is not None:
         from .purposes import attach, ride_from_nodes
         L = attach(net, cfg, L, assign, ride_from_nodes(net, sub), pspec)
-    nb = int(round(n_total * ebike_share))
-    F = allocate_fleet(L, ops, nb, n_total - nb, oh, rh, seed=seed)
+    cnt = split_total(n_total, ops.mix) + [0, 0]
+    F = allocate_fleet(L, ops, cnt[0], cnt[1], oh, rh, seed=seed, n_tr=cnt[2] if ops.nt > 2 else 0)
     placed = int(F.init.sum())
     if day_specs:
         days = [simulate_day(L, F, *day_specs[i % len(day_specs)], np.random.default_rng([seed, i]))[0]
@@ -34,7 +34,7 @@ def evaluate_subset(net, cfg, cands: pd.DataFrame, idx, n_total, ebike_share, sh
     return {"使うポート": "・".join(sub["name"].astype(str)), "_idx": tuple(int(i) for i in idx),
             "充足率": r["充足率"], "平均移動時間(分/片道)": r["平均移動時間(分/片道)"], "返却失敗率": r["返却失敗率"],
             "置けた台数": placed, "駅ポート初期": int(F.init[L.k].sum()),
-            "内訳": "・".join(f"{n}:自{F.init[j, EB]}キ{F.init[j, KB]}" for j, n in enumerate(sub["name"])),
+            "内訳": "・".join(f"{n}:{fleet_label(F.init[j])}" for j, n in enumerate(sub["name"])),
             "合計移動時間(人・分/日)": r["合計移動時間(人・分/日)"],
             "_init": F.init, "_用途別": r.get("_用途別", {}), "_hourly": r.get("_hourly", []),
             "_peaks": r["ポート別最大駐車(95%点)"], "_assign": assign, "_caps": L.caps}

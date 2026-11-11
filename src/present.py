@@ -15,7 +15,8 @@ import pandas as pd  # noqa: E402
 from matplotlib import font_manager  # noqa: E402
 from matplotlib.patches import FancyBboxPatch  # noqa: E402
 
-from .plan import demand_hourly, fleet_for, make_ops, optimal_layout  # noqa: E402
+from .plan import default_mix, demand_hourly, fleet_for, make_ops, optimal_layout  # noqa: E402
+from .engine import fleet_label  # noqa: E402
 from .study import min_fleet, month_eval  # noqa: E402
 from .weather_data import month_specs  # noqa: E402
 
@@ -49,7 +50,7 @@ if _F:
 def compute(net, cfg, survey, *, conversion, year, month, station_cap, substitution, k=3, target=0.8,
             passes=2, seed=0, ebike_share=None) -> dict:
     """③④で使う計算。目標ごとの最小台数（曲線）と、目標 target での案。"""
-    es = cfg["fleet_mix"]["ebike_share"] if ebike_share is None else ebike_share
+    es = default_mix(cfg) if ebike_share is None else ebike_share
     P = cfg["survey_xlsx"]["default_modes"]
     oh, rh, sh = demand_hourly(survey, cfg, conversion, P, "平日")
     oh2, rh2, _ = demand_hourly(survey, cfg, conversion, P, "休日")
@@ -61,7 +62,7 @@ def compute(net, cfg, survey, *, conversion, year, month, station_cap, substitut
     tg = tuple(sorted(set(CURVE_FAIL) | {round(1 - target, 4)}, reverse=True))
     res = min_fleet(L, ops, oh, rh, targets=tg, n_rep=len(specs) * passes, seed=seed, day_specs=specs)
     curve = pd.DataFrame([{"目標充足率": 1 - t, "合計": r["合計"], "自転車": r["自転車"], "キックボード": r["キックボード"],
-                           "充足率": 1 - r["失敗率"]} for t, r in res.items() if not str(t).startswith("_") and r])
+                           "4輪": r.get("4輪", 0), "充足率": 1 - r["失敗率"]} for t, r in res.items() if not str(t).startswith("_") and r])
     curve = curve.sort_values("目標充足率").reset_index(drop=True)
     best = res.get(round(1 - target, 4))
     out = dict(conversion=conversion, year=year, month=month, station_cap=station_cap, substitution=substitution,
@@ -71,7 +72,7 @@ def compute(net, cfg, survey, *, conversion, year, month, station_cap, substitut
                districts=(net.houses["街区"].value_counts(sort=False).to_dict() if "街区" in net.houses else {}),
                dest={k_: cfg["destinations"][k_] for k_ in ("station", "aeon")})
     if best:
-        F = fleet_for(L, best["自転車"], best["キックボード"], oh, rh, ops, seed=seed)
+        F = fleet_for(L, best["自転車"], best["キックボード"], oh, rh, ops, seed=seed, n_tr=best.get("4輪", 0))
         ms, _ = month_eval(L, F, cfg, dem, month=month, seed=seed + 1, cal=cal, **ops_kw)
         out.update(init=F.init, walk_only=ms["全員徒歩の平均(分/片道)"], travel=ms["平均移動時間(分/片道)"])
     else:
@@ -124,7 +125,7 @@ def _map(ax, c, show_ports):
             ax.annotate(f"P{i + 1}", (p["lon"], p["lat"]), color="white", ha="center", va="center", fontsize=12,
                         weight="bold", zorder=5)
             if c["init"] is not None:
-                ax.annotate(f"自{c['init'][i, 0]}・キ{c['init'][i, 1]}", (p["lon"], p["lat"]), xytext=(14, -18),
+                ax.annotate(fleet_label(c["init"][i]), (p["lon"], p["lat"]), xytext=(14, -18),
                             textcoords="offset points", fontsize=12, color=INK, zorder=5,
                             bbox=dict(boxstyle="round,pad=0.2", fc="white", ec="none", alpha=.85))
     for key, d in c["dest"].items():
@@ -163,7 +164,7 @@ def fig_area(c):
     _map(fig.add_axes([0.035, 0.05, 0.58, 0.72]), c, show_ports=False)
     _kpi(fig, 0, "住宅", f"{c['n_houses']}", "戸")
     _kpi(fig, 1, "目的地まで（徒歩・平均）", f"{c['walk_only']:.0f}", "分")
-    _kpi(fig, 2, "車種", "2", "種（自転車・キックボード）", TEAL)
+    _kpi(fig, 2, "車種", "3", "種（自転車・キックボード・4輪）", TEAL)
     return fig
 
 
@@ -197,7 +198,7 @@ def fig_optimal(c):
     ful = 1 - b["失敗率"]
     _frame(fig, f"住宅側{c['k']}か所・{b['合計']}台で、利用希望の{ful:.0%}に応えられる", _cond(c), 3)
     _map(fig.add_axes([0.035, 0.05, 0.58, 0.72]), c, show_ports=True)
-    _kpi(fig, 0, "台数（自転車＋キックボード）", f"{b['自転車']}＋{b['キックボード']}", "台")
+    _kpi(fig, 0, "台数（自転車＋キックボード＋4輪）", f"{b['自転車']}＋{b['キックボード']}＋{b.get('4輪', 0)}", "台")
     _kpi(fig, 1, "充足率（1か月）", f"{ful:.0%}", "", TEAL)
     dt = (c["travel"] - c["walk_only"]) if c["travel"] is not None else 0
     _kpi(fig, 2, "移動時間（全員徒歩と比べて）", f"{dt:+.1f}", "分／片道")
@@ -225,7 +226,7 @@ def fig_curve(c):
     ax.set_ylim(0, 1.02)
     ax.set_xlim(0, max(cv["合計"].max() * 1.08, 10) if len(cv) else 10)
     ax.yaxis.set_major_formatter(lambda v, _: f"{v:.0%}")
-    ax.set_xlabel("台数（自転車＋キックボード、配置・内訳はそれぞれ最適化）", fontsize=14, color=MUTED)
+    ax.set_xlabel("台数（自転車＋キックボード＋4輪、配置・内訳はそれぞれ最適化）", fontsize=14, color=MUTED)
     ax.set_ylabel("充足率（1か月）", fontsize=14, color=MUTED)
     _kpi(fig, 0, "充足率80%", f"{pick[0.8] or '—'}", "台")
     _kpi(fig, 1, "充足率95%", f"{pick[0.95] or '—'}", "台", TEAL)

@@ -19,7 +19,7 @@ import pandas as pd
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from src.loaders import load_config, load_network, load_survey, resolve, survey_path  # noqa: E402
-from src.plan import demand_hourly, fleet_for, make_ops, optimal_layout  # noqa: E402
+from src.plan import default_mix, demand_hourly, fleet_for, make_ops, optimal_layout  # noqa: E402
 from src.study import annual_cost, min_fleet, year_eval  # noqa: E402
 
 G = {}
@@ -39,7 +39,7 @@ def _setup(scen, cap):
     conv = cfg["demand_scenarios"][scen]
     oh, rh, sh = demand_hourly(sv, cfg, conv, P, "平日")
     oh2, rh2, _ = demand_hourly(sv, cfg, conv, P, "休日")
-    L, _, _ = optimal_layout(net, cfg, sh, 3, cfg["fleet_mix"]["ebike_share"], station_cap=cap)
+    L, _, _ = optimal_layout(net, cfg, sh, 3, default_mix(cfg), station_cap=cap)
     return cfg, L, (oh, rh), {"平日": (oh, rh), "休日": (oh2, rh2)}
 
 
@@ -60,7 +60,7 @@ def job(args):
         r = min_fleet(L, ops, oh, rh, targets=(0.05,), n_rep=60, seed=seed)[0.05]
         if r is None:
             return {**row, "満車時の扱い": opt, "合計台数": None}
-        F = fleet_for(L, r["自転車"], r["キックボード"], oh, rh, ops, seed=seed)
+        F = fleet_for(L, r["自転車"], r["キックボード"], oh, rh, ops, seed=seed, n_tr=r.get("4輪", 0))
         ys, daily, _ = year_eval(L, F, cfg, dem, pattern="a", substitution=sub, seed=seed)
         c = annual_cost(cfg, F, L.k, daily, cap)
         return {**row, "満車時の扱い": opt, "合計台数": r["合計"], "返却失敗率": ys["返却失敗率"],
@@ -72,7 +72,7 @@ def job(args):
             return {**row, "α": opt, "合計台数": None}
         cfg = copy.deepcopy(cfg)
         cfg.setdefault("behavior", {})["discourage_alpha"] = opt
-        F = fleet_for(L, r["自転車"], r["キックボード"], oh, rh, ops, seed=seed)
+        F = fleet_for(L, r["自転車"], r["キックボード"], oh, rh, ops, seed=seed, n_tr=r.get("4輪", 0))
         ys, daily, _ = year_eval(L, F, cfg, dem, pattern="a", substitution=sub, seed=seed)
         c = annual_cost(cfg, F, L.k, daily, cap)
         return {**row, "α": opt, "合計台数": r["合計"], "利用希望/日": ys["利用希望"], "充足率": ys["充足率"],

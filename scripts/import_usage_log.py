@@ -24,6 +24,7 @@ ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 from src.demand import build_demand  # noqa: E402
 from src.loaders import load_config, load_network, load_survey, resolve, survey_path  # noqa: E402
+from src.plan import default_mix  # noqa: E402
 
 TYPE = {"電動アシスト自転車": "ebike", "自転車": "ebike", "ebike": "ebike",
         "電動キックボード": "kickboard", "キックボード": "kickboard", "kickboard": "kickboard"}
@@ -97,7 +98,7 @@ def main():
         rows.append({"項目": f"利用回数/日（{day}）", "観測": round(obs, 1), "シミュレーション": round(base * conv, 1),
                      "備考": f"観測から推定した転換率 {obs / base:.1%}（シミュレーションは {conv:.0%}）" if base else ""})
     rows.append({"項目": "電動アシスト自転車の割合", "観測": round(res["ebike_share_obs"], 3),
-                 "シミュレーション": cfg["fleet_mix"]["ebike_share"], "備考": "実際に乗った車種（代替乗車を含む）"})
+                 "シミュレーション": round(default_mix(cfg)[0], 3), "備考": "実際に乗った車種（代替乗車を含む）"})
     for t, v in (res.get("speed_kmh") or {}).items():
         rows.append({"項目": f"平均速度 km/h（{t}）", "観測": round(v, 1),
                      "シミュレーション": cfg["vehicles"].get(t, {}).get("speed_kmh"), "備考": "手続き時間を含む"})

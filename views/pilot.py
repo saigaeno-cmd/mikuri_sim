@@ -7,19 +7,20 @@ import streamlit as st
 
 from src.loaders import ROOT
 from src.pilot import pilot_best, pilot_grid, pilot_year
+from src.engine import fleet_label
 from src.ui import header_warnings, load_or_stop
 
 BASE_CFG, SURVEY, NET, FLAGS, DATA_KEY = load_or_stop("pilot")
 cfg = BASE_CFG
 
 st.title("実証（台数固定）")
-st.caption("台数を決めたとき（例：実証の10台）、住宅側ポートの数と自転車・キックボードの割合をどうすると、"
+st.caption("台数を決めたとき（例：実証の10台）、住宅側ポートの数と自転車・キックボード・4輪の台数をどうすると、"
            "どれだけ利用希望に応えられるか。運用は夜1回の再配置、代替乗車は設定どおり。")
 header_warnings(NET, FLAGS)
 
 with st.sidebar:
     st.markdown("**実証の条件**")
-    n_total = st.number_input("台数（自転車＋キックボード）", 1, 60, 10, key="pl_n")
+    n_total = st.number_input("台数（自転車＋キックボード＋4輪）", 1, 60, 10, key="pl_n")
     opts = list(range(5, 105, 5))              # 実証は5%から
     conv = st.select_slider("利用転換率", options=opts, value=10, format_func=lambda v: f"{v}%", key="pl_conv") / 100
     ks = st.multiselect("比べる住宅側ポート数", [1, 2, 3, 4], default=[1, 2, 3], key="pl_ks")
@@ -36,19 +37,21 @@ def grid_for(conv, n_total, ks, cap, n_rep, data_key):
 
 
 @st.cache_data(show_spinner="1年分を計算中…")
-def year_for(conv, ports, nb, nk, cap, data_key):
-    b = pd.Series({"ポート数": ports, "自転車": nb, "キックボード": nk})
+def year_for(conv, ports, nb, nk, ntr, cap, data_key):
+    b = pd.Series({"ポート数": ports, "自転車": nb, "キックボード": nk, "4輪": ntr})
     return pilot_year(NET, cfg, SURVEY, conv, b, station_cap=cap)
 
 
 g = grid_for(conv, int(n_total), tuple(sorted(ks)), int(cap), int(n_rep), DATA_KEY)
 best = pilot_best(g)
-ys, bm, cost = year_for(conv, int(best["ポート数"]), int(best["自転車"]), int(best["キックボード"]), int(cap), DATA_KEY)
+ys, bm, cost = year_for(conv, int(best["ポート数"]), int(best["自転車"]), int(best["キックボード"]), int(best["4輪"]),
+                        int(cap), DATA_KEY)
 
 st.subheader(f"最も応えられる組み合わせ（転換率{conv:.0%}・{n_total}台）")
 c1, c2, c3, c4 = st.columns(4)
 c1.metric("住宅側ポート", f"{int(best['ポート数'])}か所")
-c2.metric("内訳", f"自{int(best['自転車'])}・キ{int(best['キックボード'])}", help=f"駅ポートの朝の初期配置 {int(best['駅初期台数'])}台")
+c2.metric("内訳", fleet_label([best["自転車"], best["キックボード"], best["4輪"]]),
+          help=f"自＝電動アシスト自転車、キ＝電動キックボード、4輪＝4輪小型モビリティ。駅ポートの朝の初期配置 {int(best['駅初期台数'])}台")
 c3.metric("充足率（平日・晴れ）", f"{best['充足率']:.0%}", help=f"1年平均 {ys['充足率']:.0%}（休日・雨の日を含む）")
 c4.metric("断られる回数（平日・晴れ）", f"{best['断られた/日']:.1f}回/日",
           help=f"利用希望 {best['利用希望']:.1f}回/日のうち、利用 {best['利用']:.1f}回/日")
@@ -58,10 +61,10 @@ if best["利用"] >= n_total * 1.8:
     st.info(f"利用は1日 約{n_total * 2}回（{n_total}台×朝夕1往復）で頭打ちです。これを超える利用希望は断られるため、"
             "実証では「借りられなかった操作」を記録しないと本当の需要が分かりません。")
 
-st.subheader("ポート数 × 自転車の台数ごとの充足率（平日・晴れ）")
-hm = g.pivot_table(index="ポート数", columns="自転車", values="充足率")
+st.subheader("ポート数 × 4輪の台数ごとの充足率（平日・晴れ）")
+hm = g.pivot_table(index="ポート数", columns="4輪", values="充足率", aggfunc="max")
 fig = px.imshow(hm, text_auto=".0%", aspect="auto", color_continuous_scale="Blues", zmin=0, zmax=1,
-                labels=dict(x="自転車の台数（残りはキックボード）", y="住宅側ポート数", color="充足率"))
+                labels=dict(x="4輪の台数（残りの自転車・キックボードは最も良い分け方）", y="住宅側ポート数", color="充足率"))
 fig.update_layout(height=60 + 70 * len(hm), margin=dict(l=10, r=10, t=10, b=10))
 st.plotly_chart(fig, use_container_width=True)
 
@@ -79,7 +82,7 @@ if pf.exists():
     fig3 = px.bar(long, x="転換率", y="回/日", color="", barmode="overlay", opacity=0.85)
     fig3.update_layout(height=340, margin=dict(l=10, r=10, t=10, b=10))
     st.plotly_chart(fig3, use_container_width=True)
-    t = b[["転換率", "ポート数", "自転車", "キックボード", "充足率", "利用希望", "利用", "断られた/日", "年_充足率", "年間総費用"]].copy()
+    t = b[["転換率", "ポート数", "自転車", "キックボード", *(["4輪"] if "4輪" in b else []), "充足率", "利用希望", "利用", "断られた/日", "年_充足率", "年間総費用"]].copy()
     t["転換率"] = t["転換率"].map(lambda v: f"{v:.0%}")
     for c in ("充足率", "年_充足率"):
         t[c] = t[c].map(lambda v: f"{v:.0%}")

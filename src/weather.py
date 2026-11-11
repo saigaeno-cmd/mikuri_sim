@@ -18,5 +18,6 @@ class Weather:
 
 def get_weather(cfg: dict, name: str, vehicle: str) -> Weather:
     w = cfg["weather"][name]
-    pick = (lambda v: float(v[vehicle]) if isinstance(v, dict) else float(v))
+    # 車種の値が無い（4輪など）ときは電動アシスト自転車の値を使う
+    pick = (lambda v: float(v.get(vehicle, v.get("ebike", 1.0))) if isinstance(v, dict) else float(v))
     return Weather(name, pick(w["demand"]), float(w["walk"]), pick(w["ride"]))

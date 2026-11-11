@@ -68,6 +68,10 @@ vehicles:
   kickboard:
     label: 電動キックボード
     speed_kmh: 14.0       # 実測（車種コード lsq 通常モード、3本：2,728m÷703秒）。20km/hモードは18.1km/h（参考）
+  trans:                  # 2026-11 追加：4輪小型モビリティ（車種コード trans）
+    label: 4輪小型モビリティ
+    speed_kmh: 11.9       # 実測（クラブ⇔駅 A 4本：3,560m÷1,074秒）。周回は11.4km/h
+    slots: 2              # 1台が使う区画数（仮定：自転車・キックボード＝1区画、4輪＝2区画）。収納・駅ポート容量はこの単位
 
 # 走行経路ごとの速度（km/h、停止込み）。実測：data/raw/ride_logs/speed_summary.csv（○＝採用の走行）
 # ①ポート最適化で「経路別（実測）」を選んだときに使う。out＝住宅→施設、ret＝施設→住宅
@@ -78,6 +82,9 @@ route_speeds:
   kickboard:
     station: {out: 14.1, ret: 13.9}   # クラブ→駅 14.1（887m/226s）・駅→クラブ 14.2/13.6 の平均
     aeon:    {out: 14.0, ret: 14.0}   # 通常モードでは未測定（20km/hモードのみ）→ 通常モードの平均 14.0
+  trans:
+    station: {out: 9.4, ret: 15.7}    # クラブ→駅 FIT 9.2＋スマホ 9.7（1,680m/643s）・駅→クラブ FIT 15.2＋スマホ 16.2（1,880m/431s）
+    aeon:    {out: 11.4, ret: 11.4}   # 住宅⇔ステーションは未測定 → 南栗橋周回 11.4（4,668m/1,471s）
 
 # 駅側ポート：1台あたりの区画
 station_port:
@@ -172,8 +179,9 @@ demand_scenarios:
 
 # 混在フリート：利用者の希望車種の比率（別アンケート Q16「今後利用したい移動手段」：
 #   自転車（シェアリング）27.7%＝電動アシスト自転車、電動キックボード（シェアリング）18.2% → 60.3% : 39.7%）
+# 2026-11：4輪小型モビリティを追加。比率は画面で入力（下は仮の初期値。Q16 の自転車:キックボード＝60:40 をおおむね保つ）
 fleet_mix:
-  ebike_share: 0.603
+  shares: {ebike: 0.50, kickboard: 0.30, trans: 0.20}
   substitution: true      # true=(ii) 他の車種があれば乗り、何もなければ徒歩（2026-10 決定）／false=(i) 希望車種が無ければ徒歩
 
 procedure_sec: 60         # 貸出・返却の手続き時間（秒/回）。感度：30〜120秒
@@ -182,6 +190,7 @@ procedure_sec: 60         # 貸出・返却の手続き時間（秒/回）。感
 battery:
   kickboard: {range_km: 30, swap_below: 0.2, out_hours: 4, nightly_charge: false, swap_work_min: 10}  # swap_work_min：交換1回の作業分（仮定、人件費に計上）
   ebike: {range_km: null}  # 電動アシスト自転車は電池切れによる停止を考慮しない
+  trans: {range_km: null}  # 4輪小型モビリティも考慮しない（夜間に充電する想定）
 
 # リバランス運用（軽トラック1台・作業員1名）
 rebalance:
@@ -190,7 +199,7 @@ rebalance:
     b: a＋9:30に駅の余剰（夕方の駅→自宅の期待需要＋予備1台を超える分）を住宅側の不足に応じて戻す
     c: b＋15:30に住宅側ポート（イオン往復用）と駅ポート（帰宅用）の在庫をそろえる
   times: {b: 9.5, c: 15.5}
-  truck_capacity: {kickboard: 8, ebike: 4}
+  truck_capacity: {kickboard: 8, ebike: 4, trans: 1}   # 4輪は軽トラックに1台（仮定）
   base_min: 30            # 作業1回あたり
   per_vehicle_min: 3
   extra_trip_min: 10      # 1回で運びきれない場合の往復1回ごと
@@ -239,7 +248,7 @@ climate:
 
 # 費用（年間）
 cost:
-  price: {kickboard: 150000, ebike: 150000}   # 円/台（キックボード中心価格帯10〜30万円、アシスト自転車相場10〜20万円）
+  price: {kickboard: 150000, ebike: 150000, trans: 450000}   # 円/台（キックボード中心価格帯10〜30万円、アシスト自転車相場10〜20万円、4輪は下の参考値）
   price_reference_4wheel: 450000              # 4輪特定小型（参考：SAGA life 39万円台、BLAZE e-CARGO 54.78万円）
   life_years: 3
   maintenance: 15000                          # 円/台/年（自賠責・税・電気代 1.1〜1.5万円）

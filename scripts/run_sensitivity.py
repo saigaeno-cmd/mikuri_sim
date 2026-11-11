@@ -20,7 +20,7 @@ import pandas as pd
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from src.loaders import load_config, load_network, load_survey, resolve, survey_path  # noqa: E402
-from src.plan import demand_hourly, fleet_for, make_ops, optimal_layout  # noqa: E402
+from src.plan import default_mix, demand_hourly, fleet_for, make_ops, mix_with_ebike, optimal_layout  # noqa: E402
 from src.study import annual_cost, min_fleet, year_eval  # noqa: E402
 
 TARGET = 0.05
@@ -30,7 +30,7 @@ G = {}
 def base_values(cfg):
     sc = cfg["demand_scenarios"]
     low, high = sc["低位（暫定）"], sc["高位（暫定）"]
-    return {"需要（転換率）": (low + high) / 2, "自転車の比率": cfg["fleet_mix"]["ebike_share"],
+    return {"需要（転換率）": (low + high) / 2, "自転車の比率": round(default_mix(cfg)[0], 3),
             "駅ポート容量": cfg["station_port"]["max_slots"], "手続き時間（秒）": cfg["procedure_sec"],
             "歩行速度（km/h）": cfg["walk_speed_kmh"]}
 
@@ -40,7 +40,7 @@ def ranges(cfg):
     caps = cfg["station_port"]["capacity_cases"]
     return {  # 台数に効く項目：(低, 高, 境目探索の格子)
         "需要（転換率）": (sc["低位（暫定）"], sc["高位（暫定）"], np.linspace(sc["低位（暫定）"], sc["高位（暫定）"], 5)),
-        "自転車の比率": (0.50, 0.70, [0.50, 0.55, 0.603, 0.65, 0.70]),
+        "自転車の比率": (0.40, 0.60, [0.40, 0.45, 0.50, 0.55, 0.60]),    # 残りはキックボードと4輪に設定の比で配る
         "駅ポート容量": (caps["区画①のみ"], caps["区画②も2列"], list(caps.values())),
         "手続き時間（秒）": (30, 120, [30, 60, 90, 120]),
         "歩行速度（km/h）": (4.0, 5.5, [4.0, 4.5, 4.8, 5.0, 5.5]),
@@ -70,18 +70,20 @@ def run_point(args):
     oh, rh, sh = demand_hourly(sv, cfg, v["需要（転換率）"], P, "平日")
     oh2, rh2, _ = demand_hourly(sv, cfg, v["需要（転換率）"], P, "休日")
     cap = int(v["駅ポート容量"])
-    L, _, _ = optimal_layout(net, cfg, sh, 3, v["自転車の比率"], walk_kmh=v["歩行速度（km/h）"], station_cap=cap)
-    kw = dict(pattern=pattern, substitution=cfg["fleet_mix"]["substitution"], ebike_share=v["自転車の比率"], procedure_sec=v["手続き時間（秒）"],
+    mix = mix_with_ebike(cfg, v["自転車の比率"])
+    L, _, _ = optimal_layout(net, cfg, sh, 3, mix, walk_kmh=v["歩行速度（km/h）"], station_cap=cap)
+    kw = dict(pattern=pattern, substitution=cfg["fleet_mix"]["substitution"], ebike_share=mix, procedure_sec=v["手続き時間（秒）"],
               walk_kmh=v["歩行速度（km/h）"])
     ops = make_ops(cfg, **kw)
     r = min_fleet(L, ops, oh, rh, targets=(TARGET,), n_rep=n_rep, seed=seed)[TARGET]
     row = {"項目": param, "値": value, "運用": pattern, "回": seed}
     if r is None:
         return {**row, "達成": False}, None
-    F = fleet_for(L, r["自転車"], r["キックボード"], oh, rh, ops, seed=seed)
+    F = fleet_for(L, r["自転車"], r["キックボード"], oh, rh, ops, seed=seed, n_tr=r.get("4輪", 0))
     summ, daily, _ = year_eval(L, F, cfg, {"平日": (oh, rh), "休日": (oh2, rh2)}, seed=seed, **kw)
     cost = annual_cost(cfg, F, L.k, daily, cap)
-    return ({**row, "達成": True, "自転車": r["自転車"], "キックボード": r["キックボード"], "合計台数": r["合計"],
+    return ({**row, "達成": True, "自転車": r["自転車"], "キックボード": r["キックボード"], "4輪": r.get("4輪", 0),
+             "合計台数": r["合計"],
              "失敗率": r["失敗率"], "月_充足率": summ["充足率"], "年間総費用": cost["年間総費用"]},
             (F, L.k, daily, cap))
 
@@ -124,9 +126,9 @@ def main():
                         continue
                     F, k, daily, cap = ex
                     c = annual_cost(cfg, F, k, daily, cap, **{kw: x})
-                    nb, nk = F.n
+                    nb, nk, ntr = (list(F.n) + [0])[:3]
                     cost_rows.append({"項目": name, "値": x, "運用": pat, "回": seed, "達成": True, "自転車": nb,
-                                      "キックボード": nk, "合計台数": nb + nk, "年間総費用": c["年間総費用"]})
+                                      "キックボード": nk, "4輪": ntr, "合計台数": nb + nk + ntr, "年間総費用": c["年間総費用"]})
     df = pd.concat([df, pd.DataFrame(cost_rows)], ignore_index=True)
     df.to_csv(out / "sensitivity.csv", index=False, encoding="utf-8-sig")
     print("保存:", out / "sensitivity.csv", f"（{time.time() - t0:.0f}秒）")

@@ -14,7 +14,7 @@ import numpy as np
 
 from .demand import DESTS
 from .engine import Layout
-from .plan import demand_hourly, dest_caps, mix_ride_kmh, walk_alt_matrix
+from .plan import as_mix, demand_hourly, dest_caps, mix_ride_kmh, route_kmh, walk_alt_matrix
 from .location import kmh_to_m_per_min
 
 
@@ -23,9 +23,9 @@ def ride_speeds(cfg, ebike_share: float, route_speeds: bool = False) -> np.ndarr
     route_speeds=True：経路別の実測速度（config route_speeds）、False：車種ごとの一律の速度。"""
     if not route_speeds:
         return np.full(len(DESTS), mix_ride_kmh(cfg, ebike_share))
-    rs = cfg["route_speeds"]
-    return np.array([1.0 / (ebike_share / rs["ebike"][d]["out"] + (1 - ebike_share) / rs["kickboard"][d]["out"])
-                     for d in DESTS])
+    mix = as_mix(cfg, ebike_share)
+    rk = route_kmh(cfg)                                   # [目的地][往路,復路][車種]
+    return np.array([1.0 / sum(m / v for m, v in zip(mix, rk[d][0]) if m > 0) for d in range(len(DESTS))])
 
 
 def time_tensors(net, cfg, ebike_share: float, *, walk_kmh=None, procedure_sec=None, route_speeds=False):

@@ -181,7 +181,7 @@ def fresh_cfg(base_cfg):
 @dataclass
 class OpsSpec:
     """運用・車両の条件（新モデル）。"""
-    ebike_share: float
+    mix: tuple            # 希望車種の比率（自転車, キックボード, 4輪）
     substitution: bool
     pattern: str
     station_cap: int
@@ -191,6 +191,11 @@ class OpsSpec:
     month: int
     n_rep: int
     year: int = 0
+
+    @property
+    def ebike_share(self) -> tuple:
+        """（互換）計算関数の ebike_share 引数に渡す値＝希望車種の比率。"""
+        return self.mix
 
     def key(self) -> str:
         return json.dumps(self.__dict__, ensure_ascii=False, sort_keys=True)
@@ -220,9 +225,19 @@ def ops_sidebar(cfg, *, key_prefix: str = "", show_period: bool = True) -> OpsSp
     """車両（混在比率・代替乗車）・運用（リバランス・駅ポート容量・手続き時間）・充電・期間。cfg の battery を上書きする。"""
     fm = cfg["fleet_mix"]
     st.subheader("車両")
-    es = st.slider("電動アシスト自転車を希望する人の割合", 30, 90, round(fm["ebike_share"] * 100), 1, format="%d%%",
-                   key=f"{key_prefix}es", help="別アンケート Q16 より 60.3%（残りは電動キックボード）") / 100
-    sub = st.radio("希望車種が空いていないとき", ["(i) 利用しない", "(ii) もう一方の車種に乗る"],
+    from .plan import default_mix
+    dm = default_mix(cfg)
+    st.markdown("希望する車種の割合（%）")
+    c1, c2 = st.columns(2)
+    p_eb = c1.number_input("電動アシスト自転車", 0, 100, round(dm[0] * 100), 5, key=f"{key_prefix}es")
+    p_kb = c2.number_input("電動キックボード", 0, 100, round(dm[1] * 100), 5, key=f"{key_prefix}ks")
+    p_tr = 100 - p_eb - p_kb
+    if p_tr < 0:
+        st.error("自転車とキックボードの合計が100%を超えています。")
+        st.stop()
+    st.caption(f"4輪小型モビリティ：{p_tr}%（残り）。初期値は仮の値（アンケート Q16 の自転車:キックボード＝60:40 を保つ）。")
+    es = (p_eb / 100, p_kb / 100, p_tr / 100)
+    sub = st.radio("希望車種が空いていないとき", ["(i) 利用しない", "(ii) ほかの車種に乗る"],
                    index=1 if fm["substitution"] else 0, key=f"{key_prefix}sub").startswith("(ii)")
     st.subheader("運用")
     pats = cfg["rebalance"]["patterns"]
@@ -294,13 +309,12 @@ def purposes_sidebar(cfg, key_prefix: str = "") -> dict:
 def port_table(names, caps_house, init, caps_all, k, peaks, assign, station_cap):
     """ポートごとの表（住宅側＋駅・モビリティステーション・公園）。assign の -1（利用しない住宅）は数えない。"""
     import pandas as pd
-    from .engine import EB, KB
     dl = ["駅西口ポート", "モビリティステーション"] + (["公園ポート"] if len(caps_all) > k + 2 else [])
     a = np.asarray(assign)
     cap_txt = lambda c: "制限なし" if c is None or not np.isfinite(float(c)) else str(int(c))  # noqa: E731
     return pd.DataFrame({
         "ポート": list(names) + dl,
-        "自転車": list(init[:, EB]), "キックボード": list(init[:, KB]),
+        **{c: list(init[:, t]) for t, c in enumerate(["自転車", "キックボード", "4輪"][:init.shape[1]])},
         "収納": [cap_txt(c) for c in caps_house] + [str(station_cap)] + [cap_txt(c) for c in caps_all[k + 1:]],
         "最大駐車(95%点)": list(peaks[:len(caps_all)]),
         "カバー戸数": [str(int(x)) for x in np.bincount(a[a >= 0], minlength=k)] + ["—"] * len(dl)})

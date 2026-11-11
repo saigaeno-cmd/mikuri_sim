@@ -61,7 +61,7 @@ def main():
     (out / "meta.json").write_text(json.dumps({"vehicles": a.vehicles, "n_rep": a.n_rep,
                                                "districts": a.districts or load_network(cfg).districts},
                                               ensure_ascii=False), encoding="utf-8")
-    cols = ["転換率", "ポート数", "自転車", "キックボード", "駅初期台数", "充足率", "利用希望", "利用", "断られた/日", "年_充足率",
+    cols = ["転換率", "ポート数", "自転車", "キックボード", "4輪", "駅初期台数", "充足率", "利用希望", "利用", "断られた/日", "年_充足率",
             "年間利用回数", "年間総費用"]
     print(best[cols].round(3).to_string(index=False))
     print("保存:", out)

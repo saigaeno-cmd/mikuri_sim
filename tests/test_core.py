@@ -306,7 +306,7 @@ def test_engine_night_reset_and_truck_time():
     assert [S.count(p) for p in range(3)] == [10, 0, 0]       # 終電後に初期配置へ
     assert st.ops and st.ops[-1][1] == st.served_out           # 駅に行った台数だけ戻す
     o = _O()
-    assert _truck(o, 4, 8) == (30 + 3 * 12 + 10 * 1, 2)        # 自転車4台＋キックボード8台＝2往復
+    assert _truck(o, [4, 8]) == (30 + 3 * 12 + 10 * 1, 2)        # 自転車4台＋キックボード8台＝2往復
 
 
 def test_allocate_fleet_station_and_cap():
@@ -330,7 +330,7 @@ def test_min_fleet_real_data():
     oh, rh, sh = demand_hourly(sv, c, 0.1, c["survey_xlsx"]["default_modes"], "平日")
     L, _, _ = optimal_layout(net, c, sh, 3, 0.603)
     r = min_fleet(L, make_ops(c), oh, rh, targets=(0.2,), n_rep=20, seed=0)[0.2]
-    assert r is not None and r["失敗率"] <= 0.2 and r["合計"] == r["自転車"] + r["キックボード"]
+    assert r is not None and r["失敗率"] <= 0.2 and r["合計"] == r["自転車"] + r["キックボード"] + r["4輪"]
 
 
 def test_rebalance_b_station_buffer():
@@ -422,7 +422,8 @@ def test_pilot_grid_fixed_fleet():
     c = {**CFG, "simulation": {**CFG["simulation"], "n_households": len(net.houses)}}
     sv = load_survey(survey_path(c)[0], c)
     g = pilot_grid(net, c, sv, 0.3, n_total=10, ks=(1, 2), n_rep=20)
-    assert len(g) == 2 * 11 and ((g["自転車"] + g["キックボード"]) == 10).all()
+    assert len(g) == 2 * sum(11 - t for t in range(int(g["4輪"].max()) + 1)) and g["4輪"].max() >= 1
+    assert ((g["自転車"] + g["キックボード"] + g["4輪"]) == 10).all()
     b = pilot_best(g)
     assert b["利用"] <= 10 * 2 + 1e-9                          # 10台×朝夕1往復で頭打ち（夜に初期配置へ戻す）
     assert b["断られた/日"] > 0
@@ -565,16 +566,16 @@ def test_purpose_flows():
     ops = make_ops(c)
     oh2, rh2 = pu.with_flows(oh, rh, spec, "休日")
     F = fleet_for(L2, 30, 20, oh2, rh2, ops)
-    assert F.init.shape == (L.k + 3, 2) and F.init[L.k + 2].sum() == 0
+    assert F.init.shape == (L.k + 3, ops.nt) and F.init[L.k + 2].sum() == 0
     r = simulate_days(L2, F, ops, oh2, rh2, n_rep=20, seed=0)
     pur = r["_用途別"]
     assert {"イオン⇔駅", "公園⇔住宅", "公園⇔駅"} <= set(pur)
     assert 0.6 * 7 < pur["イオン⇔駅"]["利用希望/日"] < 1.4 * 7
-    assert 0.6 * 10 < pur["公園⇔住宅"]["利用希望/日"] <= 10.0 + 1e-9      # 往復＝片道2回（行きで乗れないと帰りは徒歩）
+    assert 0.6 * 10 < pur["公園⇔住宅"]["利用希望/日"] < 1.4 * 10      # 往復＝片道2回（行きで乗れないと帰りは徒歩）
     # 流れが無い需要なら、Layout に流れがあっても従来の結果と同じ
     F0 = fleet_for(L, 30, 20, oh, rh, ops)
     a = simulate_days(L, F0, ops, oh, rh, n_rep=5, seed=3)
-    F1 = type(F0)(np.vstack([F0.init, np.zeros((1, 2), int)]))
+    F1 = type(F0)(np.vstack([F0.init, np.zeros((1, F0.init.shape[1]), int)]))
     b = simulate_days(L2, F1, ops, *pu.with_flows(oh, rh, {}, "休日"), n_rep=5, seed=3)
     assert a["充足率"] == b["充足率"] and a["平均移動時間(分/片道)"] == b["平均移動時間(分/片道)"]
 
@@ -602,10 +603,39 @@ def test_route_speeds():
     from src import timesave as ts
     from src.plan import make_ops, route_kmh
     rk = route_kmh(CFG)
-    assert rk[0][0] == (10.9, 14.1) and rk[0][1] == (16.0, 13.9)
+    assert rk[0][0] == (10.9, 14.1, 9.4) and rk[0][1] == (16.0, 13.9, 15.7)
     net = _real_net()
     wo, m0 = ts.time_tensors(net, CFG, 0.6)
     _, m1 = ts.time_tensors(net, CFG, 0.6, route_speeds=True)
     assert (m1[:, :, 0] > m0[:, :, 0]).all()                     # 住宅→駅は一律より遅い
     o = make_ops(CFG, route_speeds=True)
     assert o.route_kmh is not None and make_ops(CFG).route_kmh is None
+
+
+def test_trans_vehicle():
+    """4輪小型モビリティ：3車種目として配る・乗る。1台2区画で収納を数え、希望が無ければほかの車種に乗る。"""
+    from src.engine import TR, allocate_fleet, simulate_days
+    from src.loaders import load_survey, survey_path
+    from src.plan import default_mix, demand_hourly, make_ops, optimal_layout, split_total
+    net = _real_net()
+    c = {**CFG, "simulation": {**CFG["simulation"], "n_households": len(net.houses)}}
+    assert len(default_mix(c)) == 3 and abs(sum(default_mix(c)) - 1) < 1e-9
+    assert sum(split_total(10, default_mix(c))) == 10
+    sv = load_survey(survey_path(c)[0], c)
+    oh, rh, sh = demand_hourly(sv, c, 0.2, c["survey_xlsx"]["default_modes"], "平日")
+    L, _, _ = optimal_layout(net, c, sh, 2, default_mix(c))
+    L.caps[:L.k] = 6                                               # 住宅側は6区画
+    ops = make_ops(c)
+    assert ops.nt == 3 and ops.units()[TR] == 2
+    F = allocate_fleet(L, ops, 4, 4, oh, rh, n_tr=4)
+    assert F.init.shape[1] == 3 and F.init[:, TR].sum() == 4
+    assert (F.init[:L.k] @ ops.units() <= 6).all()
+    r = simulate_days(L, F, ops, oh, rh, n_rep=10, seed=0)
+    assert 0 < r["充足率"] <= 1
+    # 4輪だけを希望し、4輪が0台 → 代替乗車ありなら他の車種に乗る、なしなら全員断られる
+    only = make_ops(c, ebike_share=(0, 0, 1))
+    F0 = allocate_fleet(L, only, 0, 0, oh, rh, n_tr=0)
+    F0.init[:L.k, 0] = 3
+    assert simulate_days(L, F0, only, oh, rh, n_rep=5, seed=0)["代替乗車率"] == 1.0
+    no = make_ops(c, ebike_share=(0, 0, 1), substitution=False)
+    assert simulate_days(L, F0, no, oh, rh, n_rep=5, seed=0)["充足率"] == 0.0

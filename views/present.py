@@ -22,7 +22,7 @@ with st.sidebar:
                             format_func=lambda v: f"{v}%", key="pr_conv") / 100
     year, month, passes = month_sidebar(cfg, "pr_")
     cap = st.number_input("駅ポートの容量（台）", 1, 200, int(cfg["station_port"]["max_slots"]), key="pr_cap")
-    sub = st.radio("希望車種が空いていないとき", ["(ii) もう一方の車種に乗る", "(i) 利用しない"],
+    sub = st.radio("希望車種が空いていないとき", ["(ii) ほかの車種に乗る", "(i) 利用しない"],
                    index=0 if cfg["fleet_mix"]["substitution"] else 1, key="pr_sub").startswith("(ii)")
     k = st.slider("住宅側ポート数", 1, cfg["simulation"]["max_ports"], 3, key="pr_k")
     target = st.slider("③の目標充足率", 50, 99, 80, 1, format="%d%%", key="pr_target") / 100
@@ -80,7 +80,7 @@ def slide_png(i, conv, year, month, passes, cap, sub, k, target, n_pilot, data_k
         pl = calc_pilot(int(n_pilot), sub, int(cap), data_key)
         b0 = pl.iloc[0]
         note = (f"条件：実証{int(n_pilot)}台（住宅側{int(b0['ポート数'])}か所・自転車{int(b0['自転車'])}・"
-                f"キックボード{int(b0['キックボード'])}）／平日・晴れ／{'代替乗車あり' if sub else '代替乗車なし'}／"
+                f"キックボード{int(b0['キックボード'])}・4輪{int(b0.get('4輪', 0))}）／平日・晴れ／{'代替乗車あり' if sub else '代替乗車なし'}／"
                 f"駅ポート{int(cap)}台")
         f = pr.fig_pilot(pl, int(n_pilot), note)
     else:

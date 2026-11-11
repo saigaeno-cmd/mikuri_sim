@@ -7,7 +7,7 @@ from dataclasses import dataclass
 import numpy as np
 import pandas as pd
 
-from .engine import (EB, KB, Fleet, Layout, Ops, allocate_fleet, month_calendar, peak_outflow, simulate_day, summarize,
+from .engine import (EB, KB, TR, TYPES, Fleet, need_for, Layout, Ops, allocate_fleet, month_calendar, peak_outflow, simulate_day, summarize,
                      simulate_days, simulate_month)
 from .plan import fleet_for, make_ops
 
@@ -24,11 +24,13 @@ class _SeqEval:
         self.n_rep, self.seed, self.chunk, self.z = n_rep, seed, chunk, z
         self.st: dict[tuple, list] = {}        # key -> [fails(list), reqs(list)]
         self.days_run = 0
+        self.need = need_for(L, ops, out_h, ret_h, seed=seed)    # 初期配置の配分に使う分布（台数によらない）
 
     def _extend(self, key, upto):
         L, ops, out_h, ret_h = self.a
         if key not in self.st:
-            self.st[key] = [[], [], allocate_fleet(L, ops, key[0], key[1], out_h, ret_h, seed=self.seed)]
+            self.st[key] = [[], [], allocate_fleet(L, ops, key[0], key[1], out_h, ret_h, seed=self.seed,
+                                                   n_tr=key[2] if len(key) > 2 else 0, need=self.need)]
         f, q, F = self.st[key]
         for i in range(len(f), min(upto, self.n_rep)):
             o, oh, rh = self.specs[i % len(self.specs)] if self.specs else (ops, out_h, ret_h)
@@ -64,36 +66,62 @@ class _SeqEval:
 
 
 def min_fleet(L: Layout, ops: Ops, out_h, ret_h, targets=(0.05, 0.01, 0.20), n_rep=60, seed=0,
-              max_each: int | None = None, day_specs=None) -> dict:
-    """自転車台数×キックボード台数の組み合わせのうち、貸出失敗率 ≤ 目標 を満たす最小の合計台数。
-    失敗率は各車種の台数に対して減少するとみなし、自転車台数ごとに必要なキックボード台数の下限を
+              max_each: int | None = None, day_specs=None, max_tr: int | None = None) -> dict:
+    """自転車×キックボード（×4輪）の台数の組み合わせのうち、貸出失敗率 ≤ 目標 を満たす最小の合計台数。
+    失敗率は各車種の台数に対して減少するとみなし、4輪の台数ごとに、自転車台数ごとに必要なキックボード台数の下限を
     階段状にたどる（総当たりと同じ答えを、少ない評価回数で求める）。同じ乱数列で比べ、
-    目標との大小がはっきりした組み合わせは途中の日数で打ち切る（逐次判定）。
+    目標との大小がはっきりした組み合わせは途中の日数で打ち切る（逐次判定）。合計が同じなら希望の比率に近い方。
     day_specs を渡すと、日 i を day_specs[i % 日数]（その日の運用条件・需要）で計算する（1か月の暦で探す）。
     初期配置は ops・out_h・ret_h（平日・晴れ）で決める。
-    戻り値：{目標: {"自転車", "キックボード", "合計", "失敗率"} or None}, "_cache": {(nb,nk): 計算日数}, "_days": 総計算日数"""
+    戻り値：{目標: {"自転車", "キックボード", "4輪", "合計", "失敗率"} or None}, "_cache": {(nb,nk,ntr): 計算日数},
+    "_days": 総計算日数"""
     peak = peak_outflow(out_h, ret_h) * sum(m * d for m, d in zip(ops.mix, ops.demand_mult))
     if max_each is None:
         max_each = int(math.ceil(peak * 2.5)) + 8
+    use_tr = ops.nt > TR and ops.mix[TR] > 0
+    if max_tr is None:
+        max_tr = min(max_each, int(math.ceil(peak * ops.mix[TR] * 2.5)) + 4) if use_tr else 0
     ev = _SeqEval(L, ops, out_h, ret_h, n_rep, seed, day_specs=day_specs)
+    mix = np.array(ops.mix[:3] if ops.nt >= 3 else list(ops.mix) + [0.0])
 
     out = {}
     for tgt in sorted(targets, reverse=True):
-        best, nk = None, max_each
-        for nb in range(0, max_each + 1):
-            if best is not None and nb >= best[2]:
+        best = None                                   # (nb, nk, ntr, 合計, 比率のずれ)
+        worse = 0                                     # 4輪を増やしても最小合計が良くならなかった回数
+        nk0 = None
+        for ntr in range(0, max_tr + 1):
+            if best is not None and (ntr >= best[3] or worse >= 2):
                 break
-            if not ev.le((nb, max_each), tgt):
-                continue
-            nk = min(nk, max_each)
-            while nk > 0 and ev.le((nb, nk - 1), tgt):
-                nk -= 1
-            tot = nb + nk
-            ratio_gap = abs(nb / tot - ops.mix[EB]) if tot else 1
-            if best is None or tot < best[2] or (tot == best[2] and ratio_gap < best[3]):
-                best = (nb, nk, tot, ratio_gap)
-        out[tgt] = None if best is None else {"自転車": best[0], "キックボード": best[1], "合計": best[2],
-                                              "失敗率": ev.rate((best[0], best[1]), full=True)}
+            nk, local = max_each, None
+            for nb in range(0, max_each + 1):
+                if best is not None and nb + ntr >= best[3] + 1:
+                    break
+                if local is None and not ev.le((nb, max_each, ntr), tgt):   # 一度満たせば、自転車を増やしても満たす
+                    continue
+                if local is None:                     # 最初の自転車台数：必要なキックボード台数を二分探索
+                    lo, hi = 0, nk if nb > 0 or nk0 is None else min(nk, nk0)
+                    while lo < hi:
+                        mid = (lo + hi) // 2
+                        if ev.le((nb, mid, ntr), tgt):
+                            hi = mid
+                        else:
+                            lo = mid + 1
+                    nk = lo
+                    if nb == 0:
+                        nk0 = nk                      # 4輪を1台増やしたとき、必要なキックボード台数はこれ以下
+                while nk > 0 and ev.le((nb, nk - 1, ntr), tgt):
+                    nk -= 1
+                tot = nb + nk + ntr
+                local = tot if local is None else min(local, tot)
+                if nk == 0:                           # これ以上自転車を増やすと合計は増えるだけ
+                    break
+                gap = float(np.abs(np.array([nb, nk, ntr]) / tot - mix).sum()) if tot else 9.0
+                if best is None or tot < best[3] or (tot == best[3] and gap < best[4]):
+                    best = (nb, nk, ntr, tot, gap)
+            # 4輪の台数に対して最小合計はおおむね谷形：2回続けて最良を下回らなければ打ち切る
+            worse = 0 if (local is not None and local <= best[3]) else worse + 1 if best is not None else 0
+        out[tgt] = None if best is None else {"自転車": best[0], "キックボード": best[1], "4輪": best[2], "合計": best[3],
+                                              "失敗率": ev.rate(best[:3], full=True)}
     out["_cache"] = {k: len(v[0]) for k, v in ev.st.items()}
     out["_days"] = ev.days_run
     return out
@@ -160,17 +188,18 @@ def annual_cost(cfg, fleet: Fleet, k_house: int, daily: pd.DataFrame, station_ca
                 price_scale=1.0, port_scale=1.0, truck_scale=1.0) -> dict:
     """年間費用（円）。daily が1年分（year_eval）ならその合計、1か月分なら平日・休日の1日平均を稼働日数で年換算する。"""
     c = cfg["cost"]
-    nb, nk = fleet.n
-    n = nb + nk
-    vehicle = (nb * c["price"]["ebike"] + nk * c["price"]["kickboard"]) * price_scale / c["life_years"]
+    ns = fleet.n
+    n = sum(ns)
+    vehicle = sum(m * c["price"].get(t, c["price"]["ebike"]) for t, m in zip(TYPES, ns)) * price_scale / c["life_years"]
+    units = np.array([float(cfg["vehicles"].get(t, {}).get("slots", 1)) for t in TYPES[:fleet.init.shape[1]]])
     maintenance = n * c["maintenance"]
     n_extra = max(fleet.init.shape[0] - (k_house + 2), 0)          # 公園ポートなど（用途別の流れ）
     ports = (k_house + 2 + n_extra) * c["port_initial"] * port_scale / c["port_life_years"]
     # 区画数：街区側＝初期台数と最大駐車の大きい方、駅＝容量、モビリティステーション・公園＝最大駐車
     peaks = (np.array(daily["ポート別最大駐車(95%点)"].tolist()).max(0) if len(daily)
              else np.zeros(fleet.init.shape[0]))
-    house_slots = np.maximum(fleet.init[:k_house].sum(1), peaks[:k_house]).sum()
-    other = sum(max(max(peaks[p], fleet.init[p].sum()), 1) for p in range(k_house + 1, len(peaks)))
+    house_slots = np.maximum(fleet.init[:k_house] @ units, peaks[:k_house]).sum()
+    other = sum(max(max(peaks[p], fleet.init[p] @ units), 1) for p in range(k_house + 1, len(peaks)))
     slots = int(house_slots + station_cap + other)
     land = slots * c["land_per_slot_month"] * 12
     if len(daily) >= 360:                      # 1年分の日別結果：そのまま合計（365日に換算）

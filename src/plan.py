@@ -5,7 +5,7 @@ import numpy as np
 import pandas as pd
 
 from .demand import DESTS, build_demand, dest_shares, hourly_matrix
-from .engine import EB, KB, Layout, Ops, allocate_fleet, peak_outflow
+from .engine import EB, KB, TR, TYPES, Layout, Ops, allocate_fleet, peak_outflow
 from .loaders import Network
 from .location import cost_matrix, solve_pmedian
 from .geo import haversine
@@ -32,14 +32,58 @@ def _idx(net):
     return [net.dest_keys.index(d) for d in DESTS]
 
 
-def mix_ride_kmh(cfg, ebike_share: float, weather: str | None = None) -> float:
-    """車種比率で所要時間を加重平均した実効走行速度（ポート位置の決定に使う）。"""
-    v_eb = cfg["vehicles"]["ebike"]["speed_kmh"]
-    v_kb = cfg["vehicles"]["kickboard"]["speed_kmh"]
-    if weather:
-        v_eb *= get_weather(cfg, weather, "ebike").ride
-        v_kb *= get_weather(cfg, weather, "kickboard").ride
-    return 1.0 / (ebike_share / v_eb + (1 - ebike_share) / v_kb)
+def default_mix(cfg) -> tuple:
+    """設定の希望車種の比率（自転車, キックボード, 4輪）。旧形式（ebike_share）にも対応。"""
+    fm = cfg["fleet_mix"]
+    if "shares" in fm:
+        return as_mix(cfg, tuple(float(fm["shares"].get(t, 0.0)) for t in TYPES))
+    return as_mix(cfg, float(fm["ebike_share"]))
+
+
+def as_mix(cfg, mix) -> tuple:
+    """希望車種の比率を (自転車, キックボード, 4輪) の合計1のタプルにする。
+    None＝設定の値、数値＝自転車の割合（残りはキックボード、4輪0。旧形式）。"""
+    if mix is None:
+        return default_mix(cfg)
+    if np.isscalar(mix):
+        m = [float(mix), 1.0 - float(mix), 0.0]
+    else:
+        m = [float(x) for x in mix] + [0.0] * (len(TYPES) - len(mix))
+    s = sum(m)
+    return tuple(x / s for x in m) if s > 0 else (1.0, 0.0, 0.0)
+
+
+def mix_with_ebike(cfg, ebike: float) -> tuple:
+    """自転車の割合だけを変えた比率（残りはキックボードと4輪に設定の比で配る）。感度分析用。"""
+    base = default_mix(cfg)
+    rest = sum(base[1:])
+    return as_mix(cfg, (ebike,) + tuple((1 - ebike) * b / rest for b in base[1:]) if rest > 0 else (ebike, 1 - ebike, 0))
+
+
+def split_total(n: int, mix) -> list:
+    """合計 n 台を比率 mix で整数に分ける（最大剰余法）。"""
+    m = np.asarray(mix, float)
+    raw = n * m / m.sum()
+    out = np.floor(raw).astype(int)
+    for i in np.argsort(-(raw - out))[: n - out.sum()]:
+        out[i] += 1
+    return [int(x) for x in out]
+
+
+def type_speed(cfg, t: str) -> float:
+    return float(cfg["vehicles"][t]["speed_kmh"])
+
+
+def mix_ride_kmh(cfg, ebike_share, weather: str | None = None) -> float:
+    """車種比率で所要時間を加重平均した実効走行速度（ポート位置の決定に使う）。ebike_share：比率（as_mix 参照）。"""
+    mix = as_mix(cfg, ebike_share)
+    inv = 0.0
+    for t, m in zip(TYPES, mix):
+        if m <= 0:
+            continue
+        v = type_speed(cfg, t) * (get_weather(cfg, weather, t).ride if weather else 1.0)
+        inv += m / v
+    return 1.0 / inv
 
 
 def dest_caps(cfg, station_cap=None) -> list:
@@ -95,9 +139,12 @@ def custom_layout(net: Network, cfg, ports: pd.DataFrame, shares, ebike_share: f
 def route_kmh(cfg, weather: str | None = None) -> tuple:
     """経路別の実測速度 [目的地(DESTS順)][往路,復路][自転車,キックボード]（km/h、気象の倍率込み）。"""
     rs = cfg["route_speeds"]
-    m = ((get_weather(cfg, weather, "ebike").ride, get_weather(cfg, weather, "kickboard").ride) if weather
-         else (1.0, 1.0))
-    return tuple(tuple((rs["ebike"][d][leg] * m[0], rs["kickboard"][d][leg] * m[1]) for leg in ("out", "ret"))
+    m = [get_weather(cfg, weather, t).ride if weather else 1.0 for t in TYPES]
+
+    def v(t, d, leg):
+        r = (rs.get(t) or {}).get(d)
+        return float(r[leg]) if r else type_speed(cfg, t)     # 実測の無い車種・経路は一律の速度
+    return tuple(tuple(tuple(v(t, d, leg) * m[i] for i, t in enumerate(TYPES)) for leg in ("out", "ret"))
                  for d in DESTS)
 
 
@@ -105,19 +152,21 @@ def make_ops(cfg, *, weather="晴れ", pattern="a", substitution=None, ebike_sha
              walk_kmh=None, nightly_charge=None, station_buffer_q="cfg", full_return=None,
              route_speeds=False) -> Ops:
     fm = cfg["fleet_mix"]
-    es = fm["ebike_share"] if ebike_share is None else ebike_share
-    w_eb, w_kb = get_weather(cfg, weather, "ebike"), get_weather(cfg, weather, "kickboard")
+    mix = as_mix(cfg, ebike_share)
+    ws = [get_weather(cfg, weather, t) for t in TYPES]
+    w_eb = ws[EB]
     b = cfg["battery"]["kickboard"]
     rb = cfg["rebalance"]
     return Ops(
         walk_kmh=(walk_kmh or cfg["walk_speed_kmh"]) * w_eb.walk,
-        ride_kmh=(cfg["vehicles"]["ebike"]["speed_kmh"] * w_eb.ride, cfg["vehicles"]["kickboard"]["speed_kmh"] * w_kb.ride),
-        mix=(es, 1 - es), demand_mult=(w_eb.demand, w_kb.demand),
+        ride_kmh=tuple(type_speed(cfg, t) * w.ride for t, w in zip(TYPES, ws)),
+        mix=mix, demand_mult=tuple(w.demand for w in ws),
         substitution=fm["substitution"] if substitution is None else substitution,
         procedure_min=(cfg["procedure_sec"] if procedure_sec is None else procedure_sec) / 60,
         trip_type=(cfg["trip_type"]["station"], cfg["trip_type"]["aeon"]),
         pattern=pattern, reb_times=(rb["times"]["b"], rb["times"]["c"]),
-        truck_cap=(rb["truck_capacity"]["ebike"], rb["truck_capacity"]["kickboard"]),
+        truck_cap=tuple(rb["truck_capacity"].get(t, 1) for t in TYPES),
+        slot_units=tuple(float(cfg["vehicles"][t].get("slots", 1)) for t in TYPES),
         base_min=rb["base_min"], per_vehicle_min=rb["per_vehicle_min"], extra_trip_min=rb["extra_trip_min"],
         kb_range_km=b["range_km"], kb_swap_below=b["swap_below"], kb_out_hours=b["out_hours"],
         nightly_charge=b["nightly_charge"] if nightly_charge is None else nightly_charge,
@@ -134,6 +183,6 @@ def demand_hourly(survey, cfg, conversion, purposes, day, hourly=None, station_s
     return hourly_matrix(d, "outbound"), hourly_matrix(d, "return"), dest_shares(d)
 
 
-def fleet_for(L: Layout, n_eb: int, n_kb: int, out_h, ret_h, ops: Ops, seed: int = 0):
+def fleet_for(L: Layout, n_eb: int, n_kb: int, out_h, ret_h, ops: Ops, seed: int = 0, n_tr: int = 0):
     """毎晩の初期配置（街区ポート＋駅ポート）。"""
-    return allocate_fleet(L, ops, n_eb, n_kb, out_h, ret_h, seed=seed)
+    return allocate_fleet(L, ops, n_eb, n_kb, out_h, ret_h, seed=seed, n_tr=n_tr)

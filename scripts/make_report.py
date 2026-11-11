@@ -25,7 +25,7 @@ from pptx.util import Emu, Inches, Pt
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 from src.loaders import load_config, load_network, load_survey, resolve, survey_path  # noqa: E402
-from src.plan import demand_hourly, fleet_for, make_ops, optimal_layout  # noqa: E402
+from src.plan import default_mix, demand_hourly, fleet_for, make_ops, optimal_layout  # noqa: E402
 from src.study import annual_cost, year_eval  # noqa: E402
 
 _add_series = CategoryChartData.add_series
@@ -425,6 +425,7 @@ def main():
         x = sel(scen, pat=best[0], cap=best[1])
         rec[scen] = dict(pattern=best[0], cap=best[1], nb=int(round(x["自転車"].median())),
                          nk=int(round(x["キックボード"].median())),
+                         nt=int(round(x["4輪"].median())) if "4輪" in x else 0,
                          tot=rng_txt(x["合計台数"]), cost=x["費用_年間総費用"].median(), st_peak=int(x["月_駅ポート最大在庫"].max()),
                          ful=x["月_充足率"].median(), rf=x["月_返却失敗率"].median(), per_trip=x["費用_1トリップあたり費用"].median(),
                          per_veh=x["費用_1台あたり年間費用"].median(), util=x["費用_稼働率(回/台/日)"].median(),
@@ -466,11 +467,11 @@ def main():
         oh2, rh2, _ = demand_hourly(sv, cfg, conv, P, "休日")
         r = rec[scen]
         cap_s = r["cap"] if r else base_cap
-        L, ports, assign = optimal_layout(net, cfg, sh, 3, cfg["fleet_mix"]["ebike_share"], station_cap=cap_s)
+        L, ports, assign = optimal_layout(net, cfg, sh, 3, default_mix(cfg), station_cap=cap_s)
         lay[scen] = (L, ports, assign)
         if r:
             ops = make_ops(cfg, pattern=r["pattern"], substitution=cfg["fleet_mix"]["substitution"])
-            F = fleet_for(L, r["nb"], r["nk"], oh, rh, ops)
+            F = fleet_for(L, r["nb"], r["nk"], oh, rh, ops, n_tr=r.get("nt", 0))
             ys, ydaily, bm = year_eval(L, F, cfg, {"平日": (oh, rh), "休日": (oh2, rh2)}, pattern=r["pattern"],
                                        substitution=cfg["fleet_mix"]["substitution"], seed=1)
             cost = annual_cost(cfg, F, L.k, ydaily, cap_s)
@@ -524,8 +525,10 @@ def main():
                        f"駅西口ポート・モビリティステーションは固定。"])
     put(by_id(s, 47), "FLEET")
     put(by_id(s, 48), "混在フリートの台数")
-    put(by_id(s, 53), "自転車60.3%：キックボード39.7%")
-    fl = lambda r: f"自転車{r['nb']}＋キックボード{r['nk']}＝{r['nb'] + r['nk']}台" if r else "目標未達"
+    _m = default_mix(cfg)
+    put(by_id(s, 53), f"自転車{_m[0]:.0%}：キックボード{_m[1]:.0%}：4輪{_m[2]:.0%}")
+    fl = (lambda r: f"自転車{r['nb']}＋キックボード{r['nk']}＋4輪{r.get('nt', 0)}＝{r['nb'] + r['nk'] + r.get('nt', 0)}台"
+          if r else "目標未達")
     put(by_id(s, 49), [f"低位：{fl(rl)}", f"高位：{fl(rh_)}",
                        f"（{reps}回の中央値。駅ポートの朝の初期配置を含む）"])
     put(by_id(s, 24), "OPERATION")
@@ -544,7 +547,7 @@ def main():
         if not r:
             continue
         stp = int(r["init"][L0.k].sum())
-        txt = (f"住宅側ポート3か所・電動アシスト自転車{r['nb']}台＋電動キックボード{r['nk']}台・"
+        txt = (f"住宅側ポート3か所・電動アシスト自転車{r['nb']}台＋電動キックボード{r['nk']}台＋4輪小型モビリティ{r.get('nt', 0)}台・"
                f"駅ポート{r['cap']}台分（最大在庫{r['st_peak']}台、朝の初期配置{stp}台）・運用は{PAT_NAME[r['pattern']]}、"
                f"年間費用は{yen_man(r['cost'])}（1トリップ{r['per_trip']:,.0f}円・1台{r['per_veh'] / 1e4:,.1f}万円/年）。"
                f"1か月の充足率は{r['ful']:.1%}"

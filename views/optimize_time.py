@@ -12,7 +12,7 @@ from streamlit_folium import st_folium
 from src import timesave as ts
 from src import viz
 from src.demand import DESTS
-from src.engine import EB, KB
+from src.engine import EB, KB, fleet_label
 from src.plan import demand_hourly, fleet_for, make_ops
 from src.study import annual_cost, min_fleet, month_eval
 from src.ui import fresh_cfg, header_warnings, hourly_fig, load_or_stop, month_specs, ops_sidebar, port_table
@@ -35,13 +35,15 @@ with st.sidebar:
     RS = st.radio("走行経路ごとの速度", ["経路別（実測）", "一律（車種ごと）"], key="ot_rs",
                   help="経路別：実測の走行データ（data/raw/ride_logs/speed_summary.csv）から、住宅⇔駅・住宅⇔イオンごと、"
                        "行き・帰りごとに速度を分ける。一律：車種ごとの平均速度（自転車"
-                       f"{cfg['vehicles']['ebike']['speed_kmh']}・キックボード{cfg['vehicles']['kickboard']['speed_kmh']} km/h）"
+                       f"{cfg['vehicles']['ebike']['speed_kmh']}・キックボード{cfg['vehicles']['kickboard']['speed_kmh']}・"
+                       f"4輪{cfg['vehicles']['trans']['speed_kmh']} km/h）"
                   ).startswith("経路別")
     if RS:
         _rs = cfg["route_speeds"]
         st.caption("km/h（停止込み）　行き／帰り\n\n"
                    + "\n\n".join(f"{lab}：自転車 {_rs['ebike'][d]['out']}／{_rs['ebike'][d]['ret']}・"
-                                   f"キックボード {_rs['kickboard'][d]['out']}／{_rs['kickboard'][d]['ret']}"
+                                   f"キックボード {_rs['kickboard'][d]['out']}／{_rs['kickboard'][d]['ret']}・"
+                                   f"4輪 {_rs['trans'][d]['out']}／{_rs['trans'][d]['ret']}"
                                    for d, lab in (("station", "住宅⇔駅"), ("aeon", "住宅⇔イオン"))))
     trips = st.number_input("対象住宅の利用（1日あたり往復）", 0.5, 5.0, 1.0, 0.5, key="ot_trips")
     st_share = st.slider("行き先：駅の割合", 0, 100, int(round(SH_SURVEY[0] * 100)), 1, format="%d%%", key="ot_share",
@@ -120,9 +122,9 @@ def search(key_):
 
 
 @st.cache_data(show_spinner="選んだ案を1か月で評価中…")
-def evaluate(key_, nb, nk):
+def evaluate(key_, nb, nk, ntr):
     ops = make_ops(cfg, weather="晴れ", **OPS_KW)
-    F = fleet_for(L, nb, nk, oh_wd, rh_wd, ops)
+    F = fleet_for(L, nb, nk, oh_wd, rh_wd, ops, n_tr=ntr)
     ms, daily = month_eval(L, F, cfg, DEM, month=ops_spec.month, seed=1, cal=CAL, **OPS_KW)
     return F.init, ms, daily, annual_cost(cfg, F, L.k, daily, ops_spec.station_cap)
 
@@ -130,10 +132,11 @@ def evaluate(key_, nb, nk):
 res = search(key)
 st.subheader("目標ごとの最小台数")
 rows = [{"目標": f"充足率{1 - t:.0%}以上（失敗率{t:.0%}以下）", "自転車": r["自転車"] if r else None,
-         "キックボード": r["キックボード"] if r else None, "合計": r["合計"] if r else None,
+         "キックボード": r["キックボード"] if r else None, "4輪": r.get("4輪", 0) if r else None,
+         "合計": r["合計"] if r else None,
          "充足率（1か月）": 1 - r["失敗率"] if r else None, "_t": t} for t, r in res.items() if not str(t).startswith("_")]
 tbl = pd.DataFrame(rows).drop(columns="_t")
-for c_ in ("自転車", "キックボード", "合計"):
+for c_ in ("自転車", "キックボード", "4輪", "合計"):
     tbl[c_] = tbl[c_].map(lambda v: "達成不可" if v is None or pd.isna(v) else f"{int(v)}")
 tbl["充足率（1か月）"] = tbl["充足率（1か月）"].map(lambda v: "—" if v is None or pd.isna(v) else f"{v:.1%}")
 st.dataframe(tbl, hide_index=True, use_container_width=True)
@@ -153,7 +156,7 @@ if not ok:
     st.stop()
 choice = st.radio("表示する案（目標）", [r["目標"] for r in ok], horizontal=True, key="ot_choice")
 sel = next(r for r in ok if r["目標"] == choice)
-init, ms, daily, cost = evaluate(key, sel["自転車"], sel["キックボード"])
+init, ms, daily, cost = evaluate(key, sel["自転車"], sel["キックボード"], sel["4輪"])
 
 # ---------- 最適ポート配置（指標4つ → 左：ポート場所の地図／右：時間帯別・ポートごと） ----------
 st.subheader("最適ポート配置")
@@ -161,7 +164,7 @@ st.caption(f"選んだ案：{choice}。計算期間：{ops_spec.year}年{ops_spe
 k1, k2, k3, k4 = st.columns(4)
 k1.metric("ポート数", f"{L.k} か所", border=True, help="住宅側ポートの数（このほかに駅西口ポート・モビリティステーション）")
 k2.metric("設置台数", f"{sel['合計']} 台", border=True,
-          help=f"電動アシスト自転車{sel['自転車']}台＋電動キックボード{sel['キックボード']}台"
+          help=f"電動アシスト自転車{sel['自転車']}台＋電動キックボード{sel['キックボード']}台＋4輪小型モビリティ{sel['4輪']}台"
                f"（うち駅ポート初期 {int(init[L.k].sum())}台）")
 k3.metric("充足率", f"{ms['充足率']:.1%}", border=True, help=f"貸出失敗率 {ms['貸出失敗率']:.1%}（往路・復路の合計）")
 k4.metric("合計移動時間（人・分/日）", f"{ms['合計移動時間(人・分/日)']:,.0f} 分", border=True,
@@ -173,7 +176,7 @@ with left:
     st.subheader("ポート場所")
     cand = NET.candidates.loc[S, ["lat", "lon"]].reset_index(drop=True)
     main = cand.assign(label=[f"P{j + 1}" for j in range(L.k)], 初期台数=init[:L.k].sum(1), 必要区画=init[:L.k].sum(1),
-                       内訳=[f"自{init[j, EB]}・キ{init[j, KB]}" for j in range(L.k)])
+                       内訳=[fleet_label(init[j]) for j in range(L.k)])
     dest_tbl = pd.DataFrame([("駅", "station", int(init[L.k].sum()), 0, ops_spec.station_cap),
                              ("モビリティステーション", "aeon", 0, 0, None)],
                             columns=["ポート", "種別", "初期台数", "必要区画", "収納"])
@@ -181,7 +184,7 @@ with left:
                      main_name="時間短縮の最適ポート", square=True)
     st_folium(m, height=540, use_container_width=True, returned_objects=[], key="ot_map")
     st.caption("色つき＝対象の住宅（色は使うポート）、灰色＝ポートが遠い・短縮が足りず利用しない住宅。"
-               "ラベル：自＝電動アシスト自転車、キ＝電動キックボードの初期台数。")
+               "ラベル：自＝電動アシスト自転車、キ＝電動キックボード、4輪＝4輪小型モビリティの初期台数。")
 with right:
     st.markdown("**時間帯別の利用希望と充足**")
     fig_h = hourly_fig(ms["_hourly"])
