@@ -407,12 +407,11 @@ else:
             bmain = chosen.rename(columns={"name": "label"}).assign(
                 初期台数=binit[:bk].sum(1), 必要区画=chosen["収納"], 収納=chosen["収納"],
                 内訳=[f"自{binit[j_, EB]}・キ{binit[j_, KB]}" for j_ in range(bk)])
-            unused = cands.drop(index=idx).rename(columns={"name": "label"})
-            bm = viz.port_map(NET.houses, NET.candidates, bmain, best["_assign"], dest_table(binit, bk), cfg,
-                              main_name="最良の組み合わせ", square=True,
-                              overlays={"使わない候補地": unused[["label", "lat", "lon"]]} if len(unused) else None)
+            bm = viz.port_map(NET.houses, NET.candidates.iloc[0:0], bmain, best["_assign"], dest_table(binit, bk),
+                              cfg, main_name="最良の組み合わせ", square=True)
             st_folium(bm, height=540, use_container_width=True, key="ev2_cmb_map", returned_objects=[])
-            st.caption("色つきの四角＝使うポート（自＝自転車、キ＝キックボードの初期台数 / 収納）。点線の丸＝使わない候補地。")
+            st.caption(f"シミュレーションで選ばれた最良の組み合わせ（候補地{len(cands)}か所のうち{bk}か所）だけを表示。"
+                       "ラベル：自＝自転車、キ＝キックボードの初期台数 / 収納。住宅の色は使うポート。")
         with cr:
             st.markdown("**時間帯別の利用希望と充足**")
             fig_b = hourly_fig(best["_hourly"])
