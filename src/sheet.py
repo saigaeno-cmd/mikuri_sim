@@ -161,7 +161,8 @@ def _hourly(ax, hr):
     ax.spines[["left", "bottom"]].set_color("#C9CED6")
     ax.grid(axis="y", color="#EEF0F3")
     ax.set_axisbelow(True)
-    ax.legend(fontsize=9, frameon=False, loc="upper left", ncol=2)
+    ax.legend(fontsize=9, frameon=False, loc="lower right", bbox_to_anchor=(1.0, 1.0), ncol=2)
+    ax.set_ylim(0, max(float(np.max(hr[:, 0])) * 1.1, 1))
 
 
 def _table(ax, df):
@@ -183,9 +184,9 @@ def sheet_time_opt(c, title: str, cond: str, roads=None):
     """①の結果シート（16:9の Figure）。"""
     fig = plt.figure(figsize=(16, 9))
     fig.patch.set_facecolor("white")
-    fig.text(0.03, 0.95, title, fontsize=24, weight="bold", color=INK, va="center")
-    fig.text(0.03, 0.905, cond, fontsize=11, color=MUTED, va="center")
-    fig.text(0.03, 0.855, "最適ポート配置", fontsize=18, weight="bold", color=INK, va="center")
+    fig.text(0.03, 0.955, title, fontsize=24, weight="bold", color=INK, va="center")
+    fig.text(0.03, 0.9, cond, fontsize=10, color=MUTED, va="center", linespacing=1.5)
+    fig.text(0.03, 0.845, "最適ポート配置", fontsize=18, weight="bold", color=INK, va="center")
     p, sel, ms, ref = c["params"], c.get("sel"), c.get("ms"), c.get("ref")
     w, gap, x0 = 0.225, 0.0133, 0.03
     vals = [("ポート数", f"{c['L'].k} か所", f"対象の住宅 {c['n_hh']}/{c['n_houses']}戸"),
@@ -197,7 +198,7 @@ def sheet_time_opt(c, title: str, cond: str, roads=None):
             ("合計移動時間", f"{ms['合計移動時間(人・分/日)']:,.0f} 人・分/日" if ms else "—",
              (f"平均 {ms['平均移動時間(分/片道)']:.1f}分/片道（全員徒歩 {ms['全員徒歩の平均(分/片道)']:.1f}分）" if ms else ""))]
     for i, (lab, val, sub) in enumerate(vals):
-        _box(fig, [x0 + i * (w + gap), 0.69, w, 0.14], lab, val, sub)
+        _box(fig, [x0 + i * (w + gap), 0.68, w, 0.14], lab, val, sub)
     fig.text(0.03, 0.655, "ポート場所", fontsize=18, weight="bold", color=INK, va="center")
     _map(fig.add_axes([0.03, 0.035, 0.55, 0.6]), c, roads)
     fig.text(0.03, 0.018, "色つきの点＝対象の住宅（色は使うポート）、灰色＝ポートが遠い・短縮が足りず利用しない住宅。"
@@ -206,18 +207,25 @@ def sheet_time_opt(c, title: str, cond: str, roads=None):
     fig.text(0.61, 0.655, "時間帯別の利用希望と充足", fontsize=13, weight="bold", color=INK, va="center")
     if ms:
         _hourly(fig.add_axes([0.645, 0.4, 0.33, 0.235]), ms["_hourly"])
-        fig.text(0.61, 0.335, "ポートごと", fontsize=13, weight="bold", color=INK, va="center")
+        fig.text(0.61, 0.335, "ポートごと（台数は初期配置、最大駐車・収納は区画）", fontsize=13, weight="bold", color=INK,
+                 va="center")
         L = c["L"]
         bp = port_table([f"P{j + 1}" for j in range(L.k)], [None] * L.k, c["init"], L.caps, L.k,
                         ms["ポート別最大駐車(95%点)"], c["assign"], p["station_cap"])
         bp["最大駐車(95%点)"] = [int(x) for x in bp["最大駐車(95%点)"]]
-        bp = bp.rename(columns={"最大駐車(95%点)": "最大駐車(95%)", "キックボード": "キック"})
-        _table(fig.add_axes([0.61, 0.035, 0.365, 0.28]), bp)
+        bp = bp.rename(columns={"最大駐車(95%点)": "最大駐車\n(95%点)", "キックボード": "キック\nボード",
+                                "カバー戸数": "カバー\n戸数"})
+        bp["ポート"] = bp["ポート"].replace({"モビリティステーション": "モビリティ\nステーション"})
+        t = _table(fig.add_axes([0.61, 0.035, 0.365, 0.28]), bp)
+        widths = [0.22, 0.12, 0.12, 0.1, 0.13, 0.17, 0.14]
+        for (r_, c_), cell in t.get_celld().items():
+            cell.set_width(widths[c_])
         if not sel and ref:
-            fig.text(0.5, 0.86, f"※ 目標{p['target']:.0%}は達成できません：朝に駅へ着く車両が最大で約{c['need_st']:.0f}台、"
+            fig.text(0.205, 0.845, f"※ 目標{p['target']:.0%}は達成できません。朝に駅へ着く車両が最大で約{c['need_st']:.0f}台、"
                      f"駅西口ポートに同時に置かれます（収納{p['station_cap']}区画）。満車で返せない車両は夜まで使えないため、"
-                     f"台数を増やしても充足率が上がりません。地図・グラフ・表は参考の{ref['合計']}台での結果。",
-                     fontsize=10, color="#B42318", va="center", ha="left", wrap=True)
+                     f"台数を増やしても充足率が上がりません。\n　 地図・グラフ・表は、利用希望をすべて受けられる台数"
+                     f"（参考 {ref['合計']}台）での結果です。",
+                     fontsize=10.5, color="#B42318", va="center", ha="left", linespacing=1.4)
     else:
         fig.text(0.61, 0.5, "目標を満たす台数が見つかりませんでした（条件を満たす住宅が無い、または探索範囲を超える）。",
                  fontsize=12, color=INK, wrap=True)

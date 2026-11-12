@@ -4,3 +4,4 @@ __pycache__/
 *.zip
 *.tmp
 data/output/study/_map.png
+data/output/sheets/.cache_*.pkl

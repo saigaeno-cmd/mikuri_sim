@@ -25,8 +25,8 @@ def cond_text(c, net) -> str:
     mix = p["mix"]
     src = c.get("source", "")
     return (f"条件：住宅からポートまで徒歩{c['A']:g}分以内／短くなる時間{c['X']:g}分以上／住宅側ポート{c['k']}か所／"
-            f"目標充足率{p['target']:.0%}／{p['year']}年{p['month']}月の1か月（{src}）×{p['passes']}回／"
-            f"{c['n_houses']}戸（{dist}）・対象住宅1日{p['trips']:g}往復・行き先 駅{c['share'][0]:.0%}\n"
+            f"目標充足率{p['target']:.0%}／{p['year']}年{p['month']}月の1か月（{src}）×{p['passes']}回\n"
+            f"{c['n_houses']}戸（{dist}）／対象の住宅は1日{p['trips']:g}往復・行き先 駅{c['share'][0]:.0%}／"
             f"希望車種 自転車{mix[0]:.0%}・キックボード{mix[1]:.0%}・4輪{mix[2]:.0%}／"
             f"{'代替乗車あり' if p['substitution'] else '代替乗車なし'}／運用{p['pattern']}／駅ポート{p['station_cap']}区画・"
             f"モビリティステーション{p['aeon_cap']}区画／手続き{p['procedure_sec']:.0f}秒／"
@@ -53,7 +53,16 @@ def main():
         kw = {k: v for k, v in cd.items() if k not in ("name", "page", "A", "X", "k")}
         if cd.get("page", "time_opt") != "time_opt":
             raise SystemExit(f"未対応のページ：{cd['page']}")
-        c = sheet.compute_time_opt(net, cfg, sv, A=float(cd["A"]), X=float(cd["X"]), k=int(cd["k"]), **kw)
+        import hashlib
+        import pickle
+        h = hashlib.md5(repr((sorted(cd.items()), (ROOT / "config.yaml").read_bytes(),
+                              net.meta.get("created_at"))).encode()).hexdigest()[:12]
+        cache = out / f".cache_{h}.pkl"           # 同じ条件・設定なら計算を再利用（描画だけ直すとき）
+        if cache.exists():
+            c = pickle.loads(cache.read_bytes())
+        else:
+            c = sheet.compute_time_opt(net, cfg, sv, A=float(cd["A"]), X=float(cd["X"]), k=int(cd["k"]), **kw)
+            cache.write_bytes(pickle.dumps(c))
         fig = sheet.sheet_time_opt(c, "① ポート最適化（時間短縮）", cond_text(c, net), roads)
         png = sheet.to_png(fig, dpi=150)
         (out / f"{cd['name']}.png").write_bytes(png)
