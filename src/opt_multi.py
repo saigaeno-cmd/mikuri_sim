@@ -18,7 +18,7 @@ import pandas as pd
 from . import timesave as ts
 from .custom_ports import snap_ports
 from .demand import DESTS
-from .engine import TYPES, Flow, Layout, month_calendar
+from .engine import TYPES, Flow, Layout, allocate_fleet, month_calendar, peak_outflow, simulate_day
 from .location import kmh_to_m_per_min
 from .plan import fleet_for, make_ops, route_kmh, type_speed
 from .purposes import walk_to
@@ -245,15 +245,32 @@ def compute(net, cfg, survey, *, dests, vehicles, target, k_max, A, X, seed=0) -
     cal = pd.concat(cal, ignore_index=True)
     ops = make_ops(cfg, weather="晴れ", **kw)
     t = round(1 - target, 4)
-    res = min_fleet(L, ops, *dem["平日"], targets=(t,), n_rep=len(specs), seed=seed, day_specs=specs, types_on=on)
-    r = res[t]
-    out = dict(L=L, S=S, cands=cands, assign=house_port, assign_hd=assign_hd, hd=hd, q=q, purposes=purposes,
+    # 上限の確認：すべてのポートを上限まで埋め、駅にも十分置いたときの充足率（これが目標に届かなければ達成不可）
+    peak = peak_outflow(*dem["平日"])
+    n_big = int(np.nansum(np.where(np.isfinite(caps), caps, 0)) + np.ceil(peak * 0.3) + 4)   # 駅には余裕分だけ
+    split = [n_big // sum(on) if o else 0 for o in on]
+    split[[i for i, o in enumerate(on) if o][0]] += n_big - sum(split)
+    F_big = allocate_fleet(L, ops, split[0], split[1], *dem["平日"], n_tr=split[2], seed=seed)
+    f_, q_ = 0, 0
+    for i, spec in enumerate(specs):
+        d_, _ = simulate_day(L, F_big, *spec, np.random.default_rng([seed, i]))
+        f_, q_ = f_ + d_.fail_out + d_.fail_ret, q_ + d_.req_out + d_.req_ret
+    best_possible = 1 - f_ / q_ if q_ else 1.0
+    if best_possible < target:
+        r, F = None, F_big
+    else:
+        res = min_fleet(L, ops, *dem["平日"], targets=(t,), n_rep=len(specs), seed=seed, day_specs=specs, types_on=on)
+        r = res[t]
+        F = F_big if r is None else None
+    out = dict(best_possible=best_possible, L=L, S=S, cands=cands, assign=house_port, assign_hd=assign_hd, hd=hd, q=q, purposes=purposes,
                dests=dests, vehicles=vehicles, dport=dport, dnode=dnode, n_cover=n_cover, cal=cal,
                source="・".join(sorted(src)), target=target, A=A, X=X, k_max=k_max, sel=r,
                n_houses=len(net.houses), n_hh=int(any_q.sum()), cfg=cfg)
-    if r is None:
-        return out
-    F = fleet_for(L, r["自転車"], r["キックボード"], *dem["平日"], ops, n_tr=r.get("4輪", 0))
+    if r is not None:
+        F = fleet_for(L, r["自転車"], r["キックボード"], *dem["平日"], ops, n_tr=r.get("4輪", 0))
+    else:                                       # 達成不可：すべてのポートを上限まで埋めた台数での結果（参考）
+        out["ref"] = {"自転車": int(F.init[:, 0].sum()), "キックボード": int(F.init[:, 1].sum()),
+                      "4輪": int(F.init[:, 2].sum()), "合計": int(F.init.sum())}
     ms, daily = month_eval(L, F, cfg, dem, seed=seed + 1, cal=cal, **kw)
     peaks = ms["ポート別最大駐車(95%点)"]
     out.update(init=F.init, ms=ms, daily=daily, station_need=int(peaks[k]),

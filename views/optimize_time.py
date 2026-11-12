@@ -93,21 +93,24 @@ st.subheader("最適ポート配置")
 n_hol = int((R["cal"]["曜日区分"] == "休日").sum())
 st.caption(f"検証期間：{'・'.join(f'{m}月' for m in OC['months'])}（平日{len(R['cal']) - n_hol}日・休日{n_hol}日、{R['source']}）。"
            f"対象の住宅 {R['n_hh']}/{R['n_houses']}戸。")
+ref = R.get("ref")
 if sel is None:
-    st.error(f"目標充足率{target:.0%}を満たす台数が、探索した範囲で見つかりませんでした。"
-             "ポートの台数上限（5台）で足りないことがあります。ポート数上限を増やすか、目標充足率を下げてください。")
-    st.stop()
+    st.error(f"目標充足率{target:.0%}は達成できません。ポートの台数上限（{OC['port_cap']}台）までポートを埋めても、"
+             f"充足率は最大 {ms['充足率']:.1%} です。ポート数上限を増やすか、需要発生条件・目標充足率を見直してください。"
+             f"下の結果は、すべてのポートを上限まで埋めた {ref['合計']}台での参考値です。")
+    sel = ref
 c1, c2, c3, c4 = st.columns(4)
 c1.metric("ポート数", f"{L.k}", border=True,
           help="住宅側ポートの数（上限以内）。このほかに目的地側のポート（駅・イオン・公園・エニタイム）を使います。")
 c2.metric("駅ポート必要容量", f"{R['station_need']} 台", border=True,
           help="3か月の駅ポートの最大駐車台数（日ごとの最大の95%点）。駅ポートは上限なしで計算。")
-c3.metric("充足率", f"{ms['充足率']:.0%}", border=True, help=f"{ms['充足率']:.1%}（目標 {target:.0%}以上、3か月）")
+c3.metric("充足率", f"{ms['充足率']:.0%}" if not ref else f"最大 {ms['充足率']:.0%}", border=True,
+          help=f"{ms['充足率']:.1%}（目標 {target:.0%}以上、3か月）")
 c4.metric("平均短縮移動時間", f"{R['saving']:.1f} 分", border=True,
           help=f"徒歩だけ {ms['全員徒歩の平均(分/片道)']:.1f}分 → 平均 {ms['平均移動時間(分/片道)']:.1f}分（片道、利用できなかった人は徒歩）")
 with st.container(border=True):
     v1, v2, v3, v4 = st.columns(4)
-    v1.metric("合計車両台数", f"{sel['合計']} 台")
+    v1.metric("合計車両台数", f"{sel['合計']} 台" + ("（参考）" if ref else ""))
     v2.metric(om.TYPE_LABEL["ebike"], f"{sel['自転車']} 台")
     v3.metric(om.TYPE_LABEL["kickboard"], f"{sel['キックボード']} 台")
     v4.metric(om.TYPE_LABEL["trans"], f"{sel.get('4輪', 0)} 台")

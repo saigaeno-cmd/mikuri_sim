@@ -646,3 +646,19 @@ def test_trans_vehicle():
     assert simulate_days(L, F0, only, oh, rh, n_rep=5, seed=0)["代替乗車率"] == 1.0
     no = make_ops(c, ebike_share=(0, 0, 1), substitution=False)
     assert simulate_days(L, F0, no, oh, rh, n_rep=5, seed=0)["充足率"] == 0.0
+
+
+def test_opt_multi_purposes_and_bound():
+    """①改訂：用途ごとの使える車種、公園は自転車だけ。上限まで埋めても届かない目標は、探索せずに達成不可。"""
+    from src import opt_multi as om
+    from src.loaders import load_survey, survey_path
+    net = _real_net()
+    c = {**CFG, "simulation": {**CFG["simulation"], "n_households": len(net.houses)}}
+    act = om.active_purposes(c, ["station", "park"], ["kickboard", "trans"])
+    assert [p["id"] for p in act] == [1]                       # 公園は自転車だけなので使えない
+    sv = load_survey(survey_path(c)[0], c)
+    r = om.compute(net, c, sv, dests=om.DEST_ALL, vehicles=["ebike", "kickboard", "trans"], target=0.99, k_max=2,
+                   A=3.0, X=4.0)
+    assert r["sel"] is None and r["ref"]["合計"] > 0 and r["ms"]["充足率"] < 0.99
+    assert (r["init"][:r["L"].k].sum(1) <= 5).all()              # 住宅側ポートは5台まで
+    assert {"住宅⇔南栗橋駅", "南栗橋駅⇔イオンスタイル"} <= set(r["ms"]["_用途別"])
