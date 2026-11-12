@@ -17,7 +17,7 @@ import pandas as pd
 
 from . import timesave as ts
 from .custom_ports import snap_ports
-from .demand import DESTS
+from .demand import DESTS, table_hourly
 from .engine import TYPES, Flow, Layout, allocate_fleet, month_calendar, peak_outflow, simulate_day
 from .location import kmh_to_m_per_min
 from .plan import fleet_for, make_ops, route_kmh, type_speed
@@ -193,7 +193,9 @@ def compute(net, cfg, survey, *, dests, vehicles, target, k_max, A, X, seed=0) -
                     o_, r_ = ts.demand_for(survey, cfg, {b: n}, day)
                     shape_o, shape_r = o_[:, DESTS.index(b)], r_[:, DESTS.index(b)]
                 else:
-                    shape_o, shape_r = _uniform(n, p["hours"]), np.zeros(24)
+                    to_, _r = table_hourly(cfg, b)           # 需要表の時間帯の形（無ければ設定の時間帯に一様）
+                    shape_o = to_ / to_.sum() * n if to_.sum() > 0 else _uniform(n, p["hours"])
+                    shape_r = np.zeros(24)
                 if b == "station":                      # 駅は片道：朝の往路と夕方の復路を別の利用者として
                     cols[day] += [shape_o, shape_r]
                 else:

@@ -23,7 +23,9 @@ def survey():
 
 
 def cfg(n_resp=4):
-    c = {**CFG, "simulation": {**CFG["simulation"], "n_respondents": n_resp, "n_households": 172}}
+    """アンケートからの需要の検査用（需要表は使わない）。"""
+    c = {**CFG, "simulation": {**CFG["simulation"], "n_respondents": n_resp, "n_households": 172},
+         "paths": {k: v for k, v in CFG["paths"].items() if k != "demand_table"}}
     return c
 
 
@@ -425,7 +427,7 @@ def test_pilot_grid_fixed_fleet():
     assert len(g) == 2 * sum(11 - t for t in range(int(g["4輪"].max()) + 1)) and g["4輪"].max() >= 1
     assert ((g["自転車"] + g["キックボード"] + g["4輪"]) == 10).all()
     b = pilot_best(g)
-    assert b["利用"] <= 10 * 2 + 1e-9                          # 10台×朝夕1往復で頭打ち（夜に初期配置へ戻す）
+    assert b["利用"] < b["利用希望"]                            # 10台では応えきれない
     assert b["断られた/日"] > 0
 
 
@@ -662,3 +664,15 @@ def test_opt_multi_purposes_and_bound():
     assert r["sel"] is None and r["ref"]["合計"] > 0 and r["ms"]["充足率"] < 0.99
     assert (r["init"][:r["L"].k].sum(1) <= 5).all()              # 住宅側ポートは5台まで
     assert {"住宅⇔南栗橋駅", "南栗橋駅⇔イオンスタイル"} <= set(r["ms"]["_用途別"])
+
+
+def test_demand_table():
+    """需要表（230戸・4目的地）：日計と、転換率・戸数での按分。"""
+    from src.demand import table_hourly
+    from src.plan import demand_hourly
+    c = {**CFG, "simulation": {**CFG["simulation"], "n_households": 230}}
+    oh, rh, sh = demand_hourly(None, c, 0.12, None, "平日")
+    assert np.allclose(oh.sum(0), [142 * 0.12, 78 * 0.12], atol=0.01) and np.allclose(rh.sum(0), oh.sum(0), atol=0.01)
+    o, r = table_hourly(c, "park")
+    assert abs(o.sum() - 19) < 0.01 and abs(table_hourly(c, "anytime")[1].sum() - 7) < 0.01
+    assert oh[6, 0] > 50 * 0.12 and oh[3].sum() == 0

@@ -38,7 +38,13 @@ def build_demand(
     station_share を与えると全用途の駅の割合をその値で上書きする。
     day: アンケートに曜日区分（平日/休日）がある場合の絞り込み。
     hourly: ((時, 往路, 復路), ...) 街区全体・転換前のトリップ数/日。与えると時間帯ごとの合計をこの値に置き換える。
+
+    2026-11：config の paths.demand_table（街区230戸の時間帯別・目的地別の移動需要、公的統計ベース）があれば、
+    アンケートの代わりにそれを使う（trips＝表の値 × 戸数/230 × 転換率。用途の絞り込みは使わない）。
     """
+    tab = demand_table(cfg)
+    if tab is not None:
+        return _from_table(tab, cfg, conversion, station_share, hourly)
     if day is not None and "day" in survey.columns:
         survey = survey[survey["day"] == day]
     sim = cfg["simulation"]
@@ -75,6 +81,60 @@ def build_demand(
     if hourly is not None:
         out = _override_hourly(out, hourly, conversion, station_share)
     return out
+
+
+# ---------------------------------------------------------------- 2026-11：時間帯別・目的地別の需要表
+TABLE_HOUSEHOLDS = 230         # 表の前提の戸数（既存171＋新規59）
+
+
+def demand_table(cfg) -> pd.DataFrame | None:
+    """paths.demand_table の表（hour, destination, direction, trips）。無ければ None。"""
+    from .loaders import resolve
+    p = (cfg.get("paths") or {}).get("demand_table")
+    if not p:
+        return None
+    path = resolve(p)
+    if not path.exists():
+        return None
+    return _read_table(str(path), path.stat().st_mtime)
+
+
+_TAB_CACHE: dict = {}
+
+
+def _read_table(path: str, mtime: float) -> pd.DataFrame:
+    key = (path, mtime)
+    if key not in _TAB_CACHE:
+        _TAB_CACHE[key] = pd.read_csv(path)
+    return _TAB_CACHE[key]
+
+
+def table_hourly(cfg, dest: str, conversion: float = 1.0) -> tuple[np.ndarray, np.ndarray]:
+    """需要表の目的地 dest の (往路 (24,), 復路 (24,))。× 戸数/230 × 転換率。"""
+    tab = demand_table(cfg)
+    o, r = np.zeros(24), np.zeros(24)
+    if tab is None:
+        return o, r
+    sc = cfg["simulation"].get("n_households", TABLE_HOUSEHOLDS) / TABLE_HOUSEHOLDS * conversion
+    t = tab[tab["destination"] == dest]
+    for row in t.itertuples(index=False):
+        (o if row.direction == "outbound" else r)[int(row.hour)] += row.trips * sc
+    return o, r
+
+
+def _from_table(tab, cfg, conversion, station_share, hourly) -> pd.DataFrame:
+    sc = cfg["simulation"].get("n_households", TABLE_HOUSEHOLDS) / TABLE_HOUSEHOLDS * conversion
+    t = tab[tab["destination"].isin(DESTS)]
+    out = pd.DataFrame({"hour": t["hour"].astype(int), "purpose": "需要表", "dest": t["destination"],
+                        "direction": t["direction"], "trips": t["trips"] * sc})
+    if station_share is not None and len(out):          # 駅の割合を指定：合計は保ち、目的地の比率だけ変える
+        tot = out.groupby("dest")["trips"].sum()
+        for d, w in (("station", station_share), ("aeon", 1 - station_share)):
+            if tot.get(d, 0) > 0:
+                out.loc[out["dest"] == d, "trips"] *= w * tot.sum() / tot[d]
+    if hourly is not None:
+        out = _override_hourly(out, hourly, conversion, station_share)
+    return out.reset_index(drop=True)
 
 
 def _override_hourly(out: pd.DataFrame, hourly: tuple, conversion: float,
