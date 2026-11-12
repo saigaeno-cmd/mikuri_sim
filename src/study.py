@@ -66,7 +66,7 @@ class _SeqEval:
 
 
 def min_fleet(L: Layout, ops: Ops, out_h, ret_h, targets=(0.05, 0.01, 0.20), n_rep=60, seed=0,
-              max_each: int | None = None, day_specs=None, max_tr: int | None = None) -> dict:
+              max_each: int | None = None, day_specs=None, max_tr: int | None = None, types_on=None) -> dict:
     """自転車×キックボード（×4輪）の台数の組み合わせのうち、貸出失敗率 ≤ 目標 を満たす最小の合計台数。
     失敗率は各車種の台数に対して減少するとみなし、4輪の台数ごとに、自転車台数ごとに必要なキックボード台数の下限を
     階段状にたどる（総当たりと同じ答えを、少ない評価回数で求める）。同じ乱数列で比べ、
@@ -78,9 +78,14 @@ def min_fleet(L: Layout, ops: Ops, out_h, ret_h, targets=(0.05, 0.01, 0.20), n_r
     peak = peak_outflow(out_h, ret_h) * sum(m * d for m, d in zip(ops.mix, ops.demand_mult))
     if max_each is None:
         max_each = int(math.ceil(peak * 2.5)) + 8
-    use_tr = ops.nt > TR and ops.mix[TR] > 0
+    on = list(types_on) if types_on is not None else [True] * 3     # 使わない車種は0台で固定
+    use_tr = ops.nt > TR and (ops.mix[TR] > 0 or types_on is not None) and on[TR]
     if max_tr is None:
-        max_tr = min(max_each, int(math.ceil(peak * ops.mix[TR] * 2.5)) + 4) if use_tr else 0
+        max_tr = (min(max_each, int(math.ceil(peak * max(ops.mix[TR], 1 / 3) * 2.5)) + 4) if use_tr else 0)
+    elif not use_tr:
+        max_tr = 0
+    max_nb = max_each if on[EB] else 0
+    max_nk = max_each if on[KB] else 0
     ev = _SeqEval(L, ops, out_h, ret_h, n_rep, seed, day_specs=day_specs)
     mix = np.array(ops.mix[:3] if ops.nt >= 3 else list(ops.mix) + [0.0])
 
@@ -92,11 +97,11 @@ def min_fleet(L: Layout, ops: Ops, out_h, ret_h, targets=(0.05, 0.01, 0.20), n_r
         for ntr in range(0, max_tr + 1):
             if best is not None and (ntr >= best[3] or worse >= 2):
                 break
-            nk, local = max_each, None
-            for nb in range(0, max_each + 1):
+            nk, local = max_nk, None
+            for nb in range(0, max_nb + 1):
                 if best is not None and nb + ntr >= best[3] + 1:
                     break
-                if local is None and not ev.le((nb, max_each, ntr), tgt):   # 一度満たせば、自転車を増やしても満たす
+                if local is None and not ev.le((nb, max_nk, ntr), tgt):   # 一度満たせば、自転車を増やしても満たす
                     continue
                 if local is None:                     # 最初の自転車台数：必要なキックボード台数を二分探索
                     lo, hi = 0, nk if nb > 0 or nk0 is None else min(nk, nk0)

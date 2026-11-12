@@ -52,6 +52,11 @@ destinations:
       - {lat: 36.109485, lon: 139.707932}        # 公園 北東の出入口付近（仮）
       - {lat: 36.108978, lon: 139.707291}        # 公園 東側の出入口付近（仮）
 
+  anytime:                                       # 2026-11 追加：エニタイムフィットネス（①ポート最適化の目的地）。固定のポートは置かない
+    label: エニタイムフィットネス
+    entrances:
+      - {lat: 36.11221272390403, lon: 139.70829978116095}   # ご提供の座標
+
 # 目的地名（アンケート側の表記）→ 内部キー
 destination_aliases:
   station: [駅, 南栗橋駅, station, 通勤先(駅)]
@@ -275,3 +280,30 @@ purposes:
     per_day: 2.0
     hours: [10, 16]
     dwell_hours: 2.0
+
+# ===== 2026-11 ①ポート最適化（時間短縮）の固定条件 =====
+# 画面で選ぶのは：目的地・対象車両・目標充足率・ポート数上限・需要発生条件（ポートまでの徒歩・短くなる時間）だけ
+opt_time:
+  pattern: a                 # リバランス：夜間に1回、初期配置に戻す
+  port_cap: 5                # ポート内の台数上限（住宅側・イオン・公園・エニタイム。駅は必要容量を算出）
+  procedure_sec: 30          # 乗降時の手続き時間（秒）
+  months: [9, 10, 11]        # 検証期間（3か月）
+  trips: 1.0                 # 対象住宅の利用：目的地ごとに1日1往復
+  route_speeds: true         # 走行経路ごとの速度は実測値
+  substitution: true         # 希望車種が無ければ、その用途で使える他の車種に乗る
+  dest_ports:                # 目的地側のポート（駅・イオンは destinations の port。公園・エニタイムは入口の近くに固定）
+    park: {lat: 36.109485, lon: 139.707932}
+    anytime: {lat: 36.11221272390403, lon: 139.70829978116095}
+  # 利用用途：from/to＝house（住宅）または目的地キー。vehicles＝使える車種
+  #   住宅の用途：条件（ポートまでの徒歩・短くなる時間）を満たす住宅が1日 trips 往復。時間帯は駅・イオン＝アンケートの形、
+  #   それ以外は hours に一様。駅発の用途（住宅が関わらない）は per_day の回数で固定
+  purposes:
+    - {id: 1, label: 住宅⇔南栗橋駅, from: house, to: station, vehicles: [kickboard, trans], days: 毎日}
+    - {id: 2, label: 南栗橋駅⇔イオンスタイル, from: station, to: aeon, vehicles: [trans, ebike], days: 毎日,
+       per_day: 2.0, hours: [10, 19], one_way: true}           # 方向ごとに片道 per_day 回/日
+    - {id: 3, label: 住宅⇔イオンスタイル, from: house, to: aeon, vehicles: [trans, ebike], days: 毎日, dwell_hours: 1.0}
+    - {id: 4, label: 南栗橋駅⇔公園, from: station, to: park, vehicles: [ebike], days: 休日,
+       per_day: 2.0, hours: [10, 16], dwell_hours: 2.0}         # 往復 per_day 回/日（休日のみ）
+    - {id: 5, label: 住宅⇔エニタイム, from: house, to: anytime, vehicles: [kickboard, trans, ebike], days: 毎日,
+       hours: [18, 22], dwell_hours: 1.5}
+    - {id: 6, label: 住宅⇔公園, from: house, to: park, vehicles: [ebike], days: 休日, hours: [10, 16], dwell_hours: 2.0}

@@ -58,6 +58,15 @@ class Flow:
     walk_d_m: np.ndarray       # (k,) 到着側：ポート→施設／自宅
     alt_m: np.ndarray          # (k,) 徒歩だけ
     weights: np.ndarray | None = None   # (k,) 住宅側ポート j への按分を指定するとき（0 の j からは乗らない）
+    allowed: tuple | None = None        # この用途で使える車種（None＝すべて）。希望は使える車種に均等、代替もこの中だけ
+
+
+def flow_type_w(ops, f) -> list:
+    """流れ f の車種ごとの需要の重み（希望の割合×気象の倍率）。"""
+    if f.allowed is None:
+        return [ops.mix[t] * ops.demand_mult[t] for t in range(ops.nt)]
+    al = [t for t in f.allowed if t < ops.nt]
+    return [(1.0 / len(al) if t in al else 0.0) * ops.demand_mult[t] for t in range(ops.nt)]
 
 
 @dataclass
@@ -166,7 +175,7 @@ def _hourly_counts_need(L: Layout, ops, out_h, ret_h, n_samp: int, rng) -> np.nd
         for i, f in enumerate(L.flows):                                      # 用途別の流れ
             if out_h.shape[1] <= 2 + i or out_h[:, 2 + i].sum() <= 0:
                 continue
-            lam = L.flow_weights(f)[:, None] * out_h[None, :, 2 + i] * lam_t[t]   # (k, 24)
+            lam = L.flow_weights(f)[:, None] * out_h[None, :, 2 + i] * flow_type_w(ops, f)[t]   # (k, 24)
             c = rng.poisson(lam, size=(n_samp,) + lam.shape)
             sh = int(math.ceil(f.dwell_min / 60)) if f.round_trip else None
             for a, b, cc in ((f.origin, f.dest, c),) + (((f.dest, f.origin, np.roll(c, sh, 2) * (np.arange(24) >= sh)),)
@@ -218,9 +227,14 @@ def allocate_fleet(L: Layout, ops, n_eb: int, n_kb: int, out_h, ret_h, n_samp: i
                     best, best_gain = (p, t), g
         if best is None:
             break
-        if best_gain <= 0:  # どこも不足しない：住宅割合に応じて街区側へ
-            t = next(u for u in range(nt) if left[u])
-            p = int(np.argmax(L.share * 1.0 - init[:L.k].sum(1) / max(init.sum(), 1)))
+        if best_gain <= 0:  # どこも不足しない：住宅割合に応じて街区側へ（満車のポートは避け、無ければ駅）
+            t = best[1] if best is not None else next(u for u in range(nt) if left[u])
+            room = np.array([init[j] @ un + un[t] <= L.caps[j] + 1e-9 for j in range(L.k)])
+            if room.any():
+                gap = L.share * 1.0 - init[:L.k].sum(1) / max(init.sum(), 1)
+                p = int(np.argmax(np.where(room, gap, -np.inf)))
+            else:
+                p = L.k
             best = (p, t)
         init[best] += 1
         left[best[1]] -= 1
@@ -509,7 +523,9 @@ def simulate_day(layout: Layout, fleet: Fleet, ops: Ops, out_h: np.ndarray, ret_
     for i, f in enumerate(L.flows):                                                    # 用途別の流れ
         if out_h.shape[1] > 2 + i and out_h[:, 2 + i].sum() > 0:
             for t in range(O.nt):
-                gen("fout", np.outer(L.flow_weights(f), out_h[:, 2 + i] * lam_t[t]), i, t)
+                wt = flow_type_w(O, f)[t]
+                if wt > 0:
+                    gen("fout", np.outer(L.flow_weights(f), out_h[:, 2 + i] * wt), i, t)
     pkey = [("住宅⇔駅", "住宅⇔イオン")[d] for d in (STATION, AEON)]
 
     def tally(label, served):
@@ -522,11 +538,13 @@ def simulate_day(layout: Layout, fleet: Fleet, ops: Ops, out_h: np.ndarray, ret_
         push(O.reb_times[1] * 60, _REB, ("reb", "c"))
     rng_km = O.kb_range_km or np.inf
 
-    def rent(p, t, now, km):
+    def rent(p, t, now, km, allowed=None):
         v = S.take(p, t, now, km)
         sub = False
         if v is None and O.substitution:
             for u in O.sub_order(t):
+                if allowed is not None and u not in allowed:
+                    continue
                 v = S.take(p, u, now, km)
                 if v is not None:
                     sub = True
@@ -589,7 +607,7 @@ def simulate_day(layout: Layout, fleet: Fleet, ops: Ops, out_h: np.ndarray, ret_
             alt = f.alt_m[j] / vw
             st.walk_only_min += alt
             km = f.ride_m[j] / 1000
-            v, sub = rent(pa, t, now, km)
+            v, sub = rent(pa, t, now, km, f.allowed)
             tally(f.label, v is not None)
             if v is None:
                 st.fail_out += kind == "fout"

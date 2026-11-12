@@ -199,7 +199,8 @@ def port_map(houses: pd.DataFrame, candidates: pd.DataFrame, main: pd.DataFrame,
         if not d.get("port"):                 # ポートの無い目的地（公園）：目的地の印だけ
             for i, e in enumerate(d.get("entrances") or []):
                 folium.Marker([e["lat"], e["lon"]], tooltip=f"{d['label']}（目的地・入口{i + 1}）",
-                              icon=folium.Icon(color="green", icon="tree", prefix="fa")).add_to(fg_d)
+                              icon=folium.Icon(color="green" if key == "park" else "purple",
+                                               icon="tree" if key == "park" else "heart", prefix="fa")).add_to(fg_d)
             e0 = (d.get("entrances") or [{}])[0]
             if e0:
                 folium.Marker([e0["lat"], e0["lon"]], icon=folium.DivIcon(

@@ -51,14 +51,15 @@ def district_sidebar(net, page: str) -> tuple:
     return tuple(n for n in names if n in sel)
 
 
-def load_or_stop(page: str = "main"):
-    """（設定, アンケート, 対象街区の Network, フラグ, データキー）。設定の n_households は対象街区の戸数にする。"""
+def load_or_stop(page: str = "main", all_districts: bool = False):
+    """（設定, アンケート, 対象街区の Network, フラグ, データキー）。設定の n_households は対象街区の戸数にする。
+    all_districts=True：街区の選択を出さず、全街区で固定。"""
     try:
         cfg, survey, net, flags, key = load_all()
     except (FileNotFoundError, ValueError) as e:
         st.error(str(e))
         st.stop()
-    sel = district_sidebar(net, page)
+    sel = tuple(net.districts) if all_districts else district_sidebar(net, page)
     net = _subset(net, key, sel)
     cfg = copy.deepcopy(cfg)
     if not cfg["simulation"].get("n_households"):
