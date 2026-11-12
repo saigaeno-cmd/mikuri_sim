@@ -1,0 +1,8 @@
+# 結果シート（1条件＝1ページ）の条件。python scripts/make_condition_sheets.py で data/output/sheets/ に作る。
+# page: time_opt＝①ポート最適化（時間短縮）。書かない項目は画面の既定値。
+- name: ①ポート最適化_徒歩1分_短縮1分_3か所
+  page: time_opt
+  A: 1.0        # 住宅からポートまでの徒歩（分以内）
+  X: 1.0        # 短くなる時間（分以上）
+  k: 3          # 住宅側ポート数
+  target: 0.80  # 目標充足率（指定が無いため画面の既定値 80%）
