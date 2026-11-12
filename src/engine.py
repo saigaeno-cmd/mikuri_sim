@@ -57,6 +57,7 @@ class Flow:
     walk_o_m: np.ndarray       # (k,) 出発側：自宅／施設→ポート
     walk_d_m: np.ndarray       # (k,) 到着側：ポート→施設／自宅
     alt_m: np.ndarray          # (k,) 徒歩だけ
+    weights: np.ndarray | None = None   # (k,) 住宅側ポート j への按分を指定するとき（0 の j からは乗らない）
 
 
 @dataclass
@@ -78,6 +79,8 @@ class Layout:
 
     def flow_weights(self, f: "Flow") -> np.ndarray:
         """流れ f の住宅側ポート j への按分（住宅側の流れは住宅割合、施設どうしは j=0 に全量）。"""
+        if f.weights is not None:
+            return f.weights
         if f.origin < 0 or f.dest < 0:
             return self.share
         w = np.zeros(self.k)

@@ -137,6 +137,11 @@ def _badge(text: str, col: str, sub: str, square: bool = False) -> str:
             f'white-space:nowrap;font-weight:600">{sub}</span></div>')
 
 
+def _dest_pt(d) -> dict:
+    """目的地の代表点：ポート、無ければ最初の入口。"""
+    return d.get("port") or (d.get("entrances") or [d.get("entrance")])[0]
+
+
 def port_map(houses: pd.DataFrame, candidates: pd.DataFrame, main: pd.DataFrame, assign: np.ndarray,
              fleet_table: pd.DataFrame, cfg: dict, *, main_name: str = "最適ポート", square: bool = False,
              overlays: dict[str, pd.DataFrame] | None = None, color_houses: bool = True,
@@ -144,7 +149,7 @@ def port_map(houses: pd.DataFrame, candidates: pd.DataFrame, main: pd.DataFrame,
     """main: 住宅の色分けに使う配置（label, lat, lon, 初期台数, 必要区画）。
     overlays: {レイヤ名: DataFrame(label, lat, lon)} 比較用に破線の輪で重ねる配置。"""
     pts_all = np.vstack([houses[["lat", "lon"]].to_numpy(),
-                         [[d["port"]["lat"], d["port"]["lon"]] for d in cfg["destinations"].values()]])
+                         [[_dest_pt(d)["lat"], _dest_pt(d)["lon"]] for d in cfg["destinations"].values()]])
     center = [(pts_all[:, 0].min() + pts_all[:, 0].max()) / 2, (pts_all[:, 1].min() + pts_all[:, 1].max()) / 2]
     m = folium.Map(location=center, zoom_start=zoom, tiles=None, control_scale=True)
     folium.TileLayer("OpenStreetMap", name="背景地図（OSM）").add_to(m)
@@ -191,6 +196,17 @@ def port_map(houses: pd.DataFrame, candidates: pd.DataFrame, main: pd.DataFrame,
     fg_d = folium.FeatureGroup(name="目的地ポート")
     dest_row = {k: d.get("port_label", k) for k, d in cfg["destinations"].items()}
     for key, d in cfg["destinations"].items():
+        if not d.get("port"):                 # ポートの無い目的地（公園）：目的地の印だけ
+            for i, e in enumerate(d.get("entrances") or []):
+                folium.Marker([e["lat"], e["lon"]], tooltip=f"{d['label']}（目的地・入口{i + 1}）",
+                              icon=folium.Icon(color="green", icon="tree", prefix="fa")).add_to(fg_d)
+            e0 = (d.get("entrances") or [{}])[0]
+            if e0:
+                folium.Marker([e0["lat"], e0["lon"]], icon=folium.DivIcon(
+                    icon_size=(200, 20), icon_anchor=(-14, 30),
+                    html=f'<div style="font:600 12px sans-serif;background:rgba(255,255,255,.85);padding:0 4px;'
+                         f'border-radius:3px;width:max-content">{d["label"].split("（")[0]}（目的地）</div>')).add_to(fg_d)
+            continue
         row = fleet_table[fleet_table["種別"] == key]
         info = f"{d['label']}：初期 {int(row['初期台数'].iloc[0])}台 / 必要区画 {int(row['必要区画'].iloc[0])}" if len(row) else d["label"]
         folium.Marker([d["port"]["lat"], d["port"]["lon"]], tooltip=info,

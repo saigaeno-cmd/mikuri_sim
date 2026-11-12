@@ -120,7 +120,7 @@ main = NET.candidates.loc[list(ports), ["lat", "lon"]].reset_index(drop=True).as
     label=[f"P{j + 1}" for j in range(L.k)], 初期台数=F.init[:L.k].sum(1), 必要区画=caps_house, 収納=caps_house,
     内訳=[fleet_label(F.init[j]) for j in range(L.k)])
 dest_tbl = pd.DataFrame([("駅", "station", int(F.init[L.k].sum()), 0, ops_spec.station_cap),
-                         ("モビリティステーション", "aeon", 0, 0, None)],
+                         ("モビリティステーション", "aeon", int(F.init[L.k + 1].sum()), 0, ops_spec.aeon_cap)],
                         columns=["ポート", "種別", "初期台数", "必要区画", "収納"])
 st.markdown("**ポートの位置・初期台数（自＝電動アシスト自転車、キ＝電動キックボード、4輪＝4輪小型モビリティ）・収納（区画）**")
 m = viz.port_map(NET.houses, NET.candidates, main, assign, dest_tbl, cfg, main_name="推奨ポート")

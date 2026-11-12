@@ -186,6 +186,7 @@ class OpsSpec:
     pattern: str
     station_cap: int
     procedure_sec: float
+    aeon_cap: int         # モビリティステーションの収納（区画）
     period: str           # "1日" / "1か月"
     weather: str          # 1日のときの気象
     month: int
@@ -244,6 +245,10 @@ def ops_sidebar(cfg, *, key_prefix: str = "", show_period: bool = True) -> OpsSp
     pattern = st.radio("リバランス", list(pats), format_func=lambda p: f"{p}：{pats[p]}", key=f"{key_prefix}pat")
     cap = st.number_input("駅ポートの容量（台）", 1, 200, int(cfg["station_port"]["max_slots"]), key=f"{key_prefix}cap",
                           help="基本25台（区画①18＋区画②1列7）。区画①のみ18台、区画②も2列なら32台")
+    acap = st.number_input("モビリティステーションの容量（区画）", 1, 200,
+                           int(cfg["service"].get("aeon_max_slots") or 10), key=f"{key_prefix}acap",
+                           help="モビリティステーション（イオン）に置ける区画数。満車なら返却失敗。4輪は1台2区画")
+    cfg["service"]["aeon_max_slots"] = int(acap)         # 配置（Layout）の容量に反映
     proc = st.slider("手続き時間（秒/回）", 0, 180, int(cfg["procedure_sec"]), 10, key=f"{key_prefix}proc")
     with st.expander("電動キックボードの充電（仮定値）"):
         b = cfg["battery"]["kickboard"]
@@ -257,7 +262,8 @@ def ops_sidebar(cfg, *, key_prefix: str = "", show_period: bool = True) -> OpsSp
     period, weather, month = "1日", "晴れ", int(cfg["month"]["month"])
     if not show_period:                        # 1か月（南栗橋の実際の天気）で計算するページ
         year, month, passes = month_sidebar(cfg, key_prefix)
-        return OpsSpec(es, sub, pattern, int(cap), float(proc), "1か月", "実際の天気", int(month), int(passes), int(year))
+        return OpsSpec(es, sub, pattern, int(cap), float(proc), int(acap), "1か月", "実際の天気", int(month), int(passes),
+                       int(year))
     if show_period:
         st.subheader("期間・気象")
         period = st.radio("シミュレーション期間", ["1日", "1か月"], horizontal=True, key=f"{key_prefix}period",
@@ -268,7 +274,7 @@ def ops_sidebar(cfg, *, key_prefix: str = "", show_period: bool = True) -> OpsSp
             month = st.selectbox("対象月（{}年）".format(cfg["month"]["year"]), list(range(1, 13)), index=month - 1,
                                  format_func=lambda m: f"{m}月", key=f"{key_prefix}month")
     n_rep = st.select_slider("シミュレーション回数（1日モードの日数）", [20, 40, 60, 100, 200], 60, key=f"{key_prefix}nrep")
-    return OpsSpec(es, sub, pattern, int(cap), float(proc), period, weather, int(month), int(n_rep))
+    return OpsSpec(es, sub, pattern, int(cap), float(proc), int(acap), period, weather, int(month), int(n_rep))
 
 
 def purposes_sidebar(cfg, key_prefix: str = "") -> dict:

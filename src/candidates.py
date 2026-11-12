@@ -13,15 +13,16 @@ from .plan import custom_layout, split_total
 
 
 def evaluate_subset(net, cfg, cands: pd.DataFrame, idx, n_total, ebike_share, shares, oh, rh, ops, station_cap,
-                    n_rep=60, seed=1, pspec=None, day_specs=None) -> dict:
+                    n_rep=60, seed=1, pspec=None, day_specs=None, park_name=None) -> dict:
     """候補 idx を使い、合計 n_total 台（自転車の割合 ebike_share）を配置可能台数の範囲で自動配分したときの結果。
     pspec：利用用途（src.purposes）の条件。与えると公園ポートと用途別の流れを加える（oh/rh は with_flows 済み）。
     day_specs：[(Ops, out_h, ret_h)] の暦。与えると日 i をその i % 日数 番目の条件で計算する。"""
     sub = cands.iloc[list(idx)].reset_index(drop=True)
     L, assign = custom_layout(net, cfg, sub, shares, ebike_share, station_cap=station_cap)
     if pspec is not None:
-        from .purposes import attach, ride_from_nodes
-        L = attach(net, cfg, L, assign, ride_from_nodes(net, sub), pspec)
+        from .purposes import attach
+        names = list(sub["name"])
+        L = attach(net, cfg, L, assign, sub, pspec, names.index(park_name) if park_name in names else None)
     cnt = split_total(n_total, ops.mix) + [0, 0]
     F = allocate_fleet(L, ops, cnt[0], cnt[1], oh, rh, seed=seed, n_tr=cnt[2] if ops.nt > 2 else 0)
     placed = int(F.init.sum())
@@ -42,28 +43,35 @@ def evaluate_subset(net, cfg, cands: pd.DataFrame, idx, n_total, ebike_share, sh
 
 def best_subsets(net, cfg, cands: pd.DataFrame, m: int, n_total: int, ebike_share, shares, oh, rh, ops,
                  station_cap, n_rep=60, max_combos=300, progress=None, pspec=None,
-                 day_specs=None) -> tuple[pd.DataFrame, str]:
-    """m か所の組み合わせを比べ、充足率の高い順に並べた表と、探索の方法（全組み合わせ／貪欲法）。"""
+                 day_specs=None, park_name=None) -> tuple[pd.DataFrame, str]:
+    """m か所の組み合わせを比べ、充足率の高い順に並べた表と、探索の方法（全組み合わせ／貪欲法）。
+    park_name：公園へ行くときのポート（候補地の名前）。指定するとその候補地は必ず使う。"""
     n = len(cands)
-    total = math.comb(n, m)
+    must = list(cands["name"]).index(park_name) if park_name in list(cands["name"]) else None
+    kw = dict(pspec=pspec, day_specs=day_specs, park_name=park_name)
+    combos = [c for c in itertools.combinations(range(n), m) if must is None or must in c]
+    total = len(combos)
     rows = []
     if total <= max_combos:
-        method = f"全{total}通りを比較"
-        for i, idx in enumerate(itertools.combinations(range(n), m)):
+        method = f"全{total}通りを比較" + ("（公園へ行くときのポートは必ず使う）" if must is not None else "")
+        for i, idx in enumerate(combos):
             rows.append(evaluate_subset(net, cfg, cands, idx, n_total, ebike_share, shares, oh, rh, ops, station_cap, n_rep,
-                                        pspec=pspec, day_specs=day_specs))
+                                        **kw))
             if progress:
                 progress((i + 1) / total)
     else:                                           # 多すぎるときは1か所ずつ足していく（貪欲法）
         method = f"組み合わせが{total}通りと多いため、1か所ずつ最良を足す方法で探索"
-        chosen: list[int] = []
-        for step in range(m):
+        chosen: list[int] = [] if must is None else [must]
+        for step in range(len(chosen), m):
             cand_rows = [evaluate_subset(net, cfg, cands, chosen + [j], n_total, ebike_share, shares, oh, rh, ops,
-                                         station_cap, n_rep, pspec=pspec, day_specs=day_specs)
+                                         station_cap, n_rep, **kw)
                          for j in range(n) if j not in chosen]
             best = max(cand_rows, key=lambda r: (r["充足率"], -r["平均移動時間(分/片道)"]))
             chosen = list(best["_idx"])
             rows.extend(cand_rows if step == m - 1 else [])
+        if not rows:                                # 公園用のポートだけで m か所に達したとき
+            rows.append(evaluate_subset(net, cfg, cands, chosen, n_total, ebike_share, shares, oh, rh, ops,
+                                        station_cap, n_rep, **kw))
             if progress:
                 progress((step + 1) / m)
     df = pd.DataFrame(rows).sort_values(["充足率", "平均移動時間(分/片道)"], ascending=[False, True]).reset_index(drop=True)

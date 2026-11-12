@@ -48,7 +48,7 @@ def analyze(log: pd.DataFrame, cfg: dict, holidays, refusals: pd.DataFrame | Non
     d["日"] = d["貸出日時"].dt.date
     d["曜日区分"] = d["貸出日時"].map(lambda t: "休日" if t.weekday() >= 5 or t.date() in hol else "平日")
     d["時"] = d["貸出日時"].dt.hour
-    dest_ports = {cfg["destinations"][k]["port_label"]: k for k in cfg["destinations"]}
+    dest_ports = {d["port_label"]: k for k, d in cfg["destinations"].items() if d.get("port_label")}
     d["方向"] = np.where(d["返却ポート"].isin(dest_ports), "往路", np.where(d["貸出ポート"].isin(dest_ports), "復路", "その他"))
     d["目的地"] = [dest_ports.get(b, dest_ports.get(a, "その他")) for a, b in zip(d["貸出ポート"], d["返却ポート"])]
     d["分"] = (d["返却日時"] - d["貸出日時"]).dt.total_seconds() / 60

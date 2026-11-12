@@ -58,9 +58,9 @@ ops = make_ops(cfg, weather="晴れ", **OPS_KW)
 CAL, SPECS, SOURCE = month_specs(cfg, ops_spec.year, ops_spec.month, DEM, OPS_KW)
 
 
-def with_purposes(L, assign, ride_park):
-    """公園ポートと用途 3〜5 の流れを加える（事前計算に公園が無ければそのまま）。"""
-    return pu.attach(NET, cfg, L, assign, ride_park, PSPEC) if USE_PU else L
+def with_purposes(L, assign, ports, park_port=None):
+    """用途 3〜5 の流れを加える（事前計算に公園が無ければそのまま）。park_port：公園へ行くときの住宅側ポート番号。"""
+    return pu.attach(NET, cfg, L, assign, ports, PSPEC, park_port) if USE_PU else L
 
 # ---------- 配置の状態（表の初期値＋版番号。版が変わると表を作り直す） ----------
 ss = st.session_state
@@ -103,10 +103,8 @@ def set_ports(df: pd.DataFrame, station=None, aeon=None):
 
 
 def dest_table(init, k) -> pd.DataFrame:
-    pc = cfg["destinations"].get(pu.PARK, {}).get("max_slots")
     return pd.DataFrame([("駅", "station", int(init[k].sum()), 0, ops_spec.station_cap),
-                         ("モビリティステーション", "aeon", int(init[k + 1].sum()), 0, None)]
-                        + ([("公園", pu.PARK, 0, 0, pc)] if USE_PU else []),
+                         ("モビリティステーション", "aeon", int(init[k + 1].sum()), 0, ops_spec.aeon_cap)],
                         columns=["ポート", "種別", "初期台数", "必要区画", "収納"])
 
 
@@ -128,7 +126,8 @@ with b2:
                  help="移動時間最短の位置。台数は下の「合計台数」を自動配分（駅ポートを含む）"):
         L0, ports0, asg0 = optimal_layout(NET, cfg, sh, int(k_load), ops_spec.ebike_share, station_cap=ops_spec.station_cap)
         if USE_PU:
-            L0 = with_purposes(L0, asg0, NET.R[list(ports0), NET.dest_keys.index(pu.PARK)])
+            L0 = with_purposes(L0, asg0, snap_ports(NET, NET.candidates.loc[list(ports0), ["lat", "lon"]]
+                                                    .reset_index(drop=True).assign(name="")))
         F0 = allocate_fleet(L0, ops, int(ss.get("ev2_nb", 12)), int(ss.get("ev2_nk", 8)), oh, rh,
                             n_tr=int(ss.get("ev2_nt", 4)))
         c = NET.candidates.loc[list(ports0)]
@@ -194,6 +193,18 @@ with t3:
     auto = st.button("台数を自動配分（駅ポート・モビリティステーション含む）", use_container_width=True,
                      disabled=edited.empty)
 
+# 公園へ行くときのポート（用途4・5）：置いたポートの中から選ぶ
+PARK_NONE = "（選ばない：用途4・5は計算しない）"
+if USE_PU:
+    _opts = [PARK_NONE] + [n for n in edited["name"]]
+    if ss.get("ev2_park") not in _opts:
+        ss["ev2_park"] = PARK_NONE
+    park_name = st.selectbox("公園へ行くときのポート（用途 4 公園⇔住宅・5 公園⇔駅）", _opts, key="ev2_park",
+                             help="公園には固定のポートを置きません。置いたポートの中から、公園へ行く人が使うポートを選びます"
+                                  "（ポートから公園の入口までは徒歩）。そのポートを自宅側でも使う住宅は、公園へは歩いて行きます。")
+else:
+    park_name = PARK_NONE
+
 # ---------- 計算 ----------
 result = None
 if not edited.empty:
@@ -204,8 +215,11 @@ if not edited.empty:
     use = snapped[~far].reset_index(drop=True)
     if len(use):
         L, assign = custom_layout(NET, cfg, use, sh, ops_spec.ebike_share, station_cap=ops_spec.station_cap)
+        park_idx = list(use["name"]).index(park_name) if park_name in list(use["name"]) else None
         if USE_PU:
-            L = with_purposes(L, assign, pu.ride_from_nodes(NET, use))
+            L = with_purposes(L, assign, use, park_idx)
+            if park_idx is None and (PSPEC["park_house"]["per_day"] or PSPEC["park_station"]["per_day"]):
+                st.info("用途4・5（公園）は、上の「公園へ行くときのポート」を選ぶと計算に入ります。")
         if auto:
             F0 = allocate_fleet(L, ops, int(nb_tot), int(nk_tot), oh, rh, n_tr=int(nt_tot))
             set_ports(pd.concat([use.assign(自転車=F0.init[:L.k, EB], キックボード=F0.init[:L.k, KB],
@@ -221,7 +235,7 @@ if not edited.empty:
         else:
             _wp = weather_path(cfg)
             key = json.dumps([DATA_KEY, _wp.stat().st_mtime if _wp.exists() else 0, cfg, spec.key(), ops_spec.key(),
-                              use[COLS].to_dict("list"), init.tolist(), PSPEC],
+                              use[COLS].to_dict("list"), init.tolist(), PSPEC, park_name],
                              ensure_ascii=False, default=str)
 
             @st.cache_data(show_spinner="シミュレーション中…")
@@ -307,7 +321,7 @@ with right:
         if fig_h is not None:
             st.plotly_chart(fig_h, use_container_width=True)
         st.markdown("**ポートごと**")
-        bp = port_table(use["name"], use["収納"], F.init, L.caps, L.k, result["ポート別最大駐車(95%点)"], assign,
+        bp = port_table([n + ("（公園用）" if i == park_idx else "") for i, n in enumerate(use["name"])], use["収納"], F.init, L.caps, L.k, result["ポート別最大駐車(95%点)"], assign,
                         ops_spec.station_cap)
         st.dataframe(bp, hide_index=True, use_container_width=True)
         st.caption("最大駐車が収納と同じなら、満車による返却失敗が起きています。")
@@ -387,10 +401,12 @@ else:
         bar = st.progress(0.0, text="組み合わせを計算中…")
         df, method = best_subsets(NET, cfg, cands, int(m_use), int(n_total), ops_spec.ebike_share, sh, oh, rh, ops,
                                   ops_spec.station_cap, progress=lambda f: bar.progress(min(f, 1.0), text="組み合わせを計算中…"),
-                                  pspec=PSPEC, day_specs=SPECS)
+                                  pspec=PSPEC, day_specs=SPECS, park_name=None if park_name == PARK_NONE else park_name)
         bar.empty()
-        ss.ev2_cmb = (df, method, int(n_total), int(m_use), (tuple(cands["name"]), json.dumps(PSPEC, sort_keys=True)))
-    if ss.get("ev2_cmb") and ss.ev2_cmb[4] == (tuple(cands["name"]), json.dumps(PSPEC, sort_keys=True)):
+        ss.ev2_cmb = (df, method, int(n_total), int(m_use),
+                      (tuple(cands["name"]), json.dumps(PSPEC, sort_keys=True), park_name, ops_spec.key()))
+    if ss.get("ev2_cmb") and ss.ev2_cmb[4] == (tuple(cands["name"]), json.dumps(PSPEC, sort_keys=True), park_name,
+                                               ops_spec.key()):
         df, method, n_done, m_done, _ = ss.ev2_cmb
         best = df.iloc[0]
         idx = list(best["_idx"])

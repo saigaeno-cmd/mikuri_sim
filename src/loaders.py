@@ -241,8 +241,20 @@ class Network:
     Wn: np.ndarray | None = None        # (n_houses, n_nodes) 住宅→全徒歩ノード 徒歩（-1=到達不能）
     Rn: np.ndarray | None = None        # (n_nodes, n_dest) 全徒歩ノード→目的地ポート 走行
     nodes: pd.DataFrame | None = None   # lat, lon, usable
-    DW: np.ndarray | None = None        # (n_dest, n_dest) 施設入口⇔施設入口 徒歩
+    DW: np.ndarray | None = None        # (全目的地, 全目的地) 施設入口⇔施設入口 徒歩。並びは all_dest_keys
     DR: np.ndarray | None = None        # (n_dest, n_dest) 目的地ポート⇔目的地ポート 走行
+    DnW: np.ndarray | None = None       # (n_nodes, ポートの無い目的地) 徒歩ノード→入口 徒歩。並びは walk_dest_keys
+    BB: np.ndarray | None = None        # (走行ノード, 走行ノード) 走行（往復の平均、-1=到達不能）
+    nb_ix: np.ndarray | None = None     # 徒歩ノード → 最寄り走行ノード
+    nb_off: np.ndarray | None = None    # その直線距離（m）
+    walk_dest_keys: list = dataclasses.field(default_factory=list)
+    all_dest_keys: list = dataclasses.field(default_factory=list)
+
+    def ride_nodes(self, a, b) -> np.ndarray:
+        """徒歩ノード a → b の走行距離（m）。a・b は同じ長さの配列。"""
+        a, b = np.asarray(a), np.asarray(b)
+        d = self.BB[self.nb_ix[a], self.nb_ix[b]].astype(float) + self.nb_off[a] + self.nb_off[b]
+        return np.where(a == b, 0.0, d)
 
     @property
     def districts(self) -> list[str]:
@@ -278,4 +290,10 @@ def load_network(cfg: dict) -> Network:
         nodes=pd.read_csv(d / "walk_nodes.csv") if (d / "walk_nodes.csv").exists() else None,
         DW=m["DW"] if "DW" in m else None,
         DR=m["DR"] if "DR" in m else None,
+        DnW=m["DnW"] if "DnW" in m else None,
+        BB=m["BB"] if "BB" in m else None,
+        nb_ix=m["nb_ix"] if "nb_ix" in m else None,
+        nb_off=m["nb_off"] if "nb_off" in m else None,
+        walk_dest_keys=list(meta.get("walk_dest_keys", [])),
+        all_dest_keys=list(meta.get("all_dest_keys", meta["dest_keys"])),
     )

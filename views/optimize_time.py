@@ -178,7 +178,7 @@ with left:
     main = cand.assign(label=[f"P{j + 1}" for j in range(L.k)], 初期台数=init[:L.k].sum(1), 必要区画=init[:L.k].sum(1),
                        内訳=[fleet_label(init[j]) for j in range(L.k)])
     dest_tbl = pd.DataFrame([("駅", "station", int(init[L.k].sum()), 0, ops_spec.station_cap),
-                             ("モビリティステーション", "aeon", 0, 0, None)],
+                             ("モビリティステーション", "aeon", int(init[L.k + 1].sum()), 0, ops_spec.aeon_cap)],
                             columns=["ポート", "種別", "初期台数", "必要区画", "収納"])
     m = viz.port_map(NET.houses, NET.candidates.iloc[0:0], main, assign, dest_tbl, cfg,
                      main_name="時間短縮の最適ポート", square=True)

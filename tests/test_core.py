@@ -560,23 +560,30 @@ def test_purpose_flows():
     assert fc_wd[:, 2:].sum() == 0 and np.isclose(fc_hd[:, 2].sum(), 5) and np.isclose(fc_wd[:, 0].sum(), 4)
     assert fc_wd[:10].sum() == 0 and fc_wd[19:].sum() == 0
     oh, rh, sh = demand_hourly(sv, c, 0.1, c["survey_xlsx"]["default_modes"], "休日")
+    from src.custom_ports import snap_ports
     L, ports, assign = optimal_layout(net, c, sh, 2, 0.6)
-    L2 = pu.attach(net, c, L, assign, net.R[ports, net.dest_keys.index("park")], spec)
-    assert L2.nport == L.k + 3 and [f.origin for f in L2.flows] == [L.k + 1, L.k, -1, L.k]
+    pdf = snap_ports(net, net.candidates.loc[list(ports), ["lat", "lon"]].reset_index(drop=True).assign(name=["A", "B"]))
+    L2 = pu.attach(net, c, L, assign, pdf, spec, park_port=1)        # 公園へ行くときのポート＝2番目の住宅側ポート
+    assert L2.nport == L.k + 2 and [f.origin for f in L2.flows] == [L.k + 1, L.k, -1, L.k]
+    assert [f.dest for f in L2.flows] == [L.k, L.k + 1, 1, 1] and L2.flows[2].weights[1] == 0
     ops = make_ops(c)
     oh2, rh2 = pu.with_flows(oh, rh, spec, "休日")
     F = fleet_for(L2, 30, 20, oh2, rh2, ops)
-    assert F.init.shape == (L.k + 3, ops.nt) and F.init[L.k + 2].sum() == 0
+    assert F.init.shape == (L.k + 2, ops.nt)
     r = simulate_days(L2, F, ops, oh2, rh2, n_rep=20, seed=0)
     pur = r["_用途別"]
     assert {"イオン⇔駅", "公園⇔住宅", "公園⇔駅"} <= set(pur)
     assert 0.6 * 7 < pur["イオン⇔駅"]["利用希望/日"] < 1.4 * 7
-    assert 0.6 * 10 < pur["公園⇔住宅"]["利用希望/日"] < 1.4 * 10      # 往復＝片道2回（行きで乗れないと帰りは徒歩）
+    w = 1 - L.share[1]                                              # 公園用のポートを使う住宅は歩いて行く
+    assert 0.6 * 10 * w < pur["公園⇔住宅"]["利用希望/日"] < 1.4 * 10 * w   # 往復＝片道2回（行きで乗れないと帰りは徒歩）
+    # 公園へ行くポートを選ばなければ、公園の用途は計算しない
+    L3 = pu.attach(net, c, L, assign, pdf, spec, park_port=None)
+    r3 = simulate_days(L3, F, ops, oh2, rh2, n_rep=5, seed=0)["_用途別"]
+    assert "公園⇔住宅" not in r3 and "公園⇔駅" not in r3 and "イオン⇔駅" in r3
     # 流れが無い需要なら、Layout に流れがあっても従来の結果と同じ
     F0 = fleet_for(L, 30, 20, oh, rh, ops)
     a = simulate_days(L, F0, ops, oh, rh, n_rep=5, seed=3)
-    F1 = type(F0)(np.vstack([F0.init, np.zeros((1, F0.init.shape[1]), int)]))
-    b = simulate_days(L2, F1, ops, *pu.with_flows(oh, rh, {}, "休日"), n_rep=5, seed=3)
+    b = simulate_days(L2, F0, ops, *pu.with_flows(oh, rh, {}, "休日"), n_rep=5, seed=3)
     assert a["充足率"] == b["充足率"] and a["平均移動時間(分/片道)"] == b["平均移動時間(分/片道)"]
 
 

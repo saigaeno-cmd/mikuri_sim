@@ -20,7 +20,8 @@ def ports_table(scn, net: Network, cfg: dict) -> pd.DataFrame:
     t.loc[nb, "経度"] = cands["lon"].to_numpy()
     t.loc[nb, "カバー戸数"] = np.bincount(scn.solution.assign, minlength=len(scn.solution.ports))
     for key, d in cfg["destinations"].items():
-        t.loc[t["種別"] == key, ["緯度", "経度"]] = [d["port"]["lat"], d["port"]["lon"]]
+        if d.get("port"):
+            t.loc[t["種別"] == key, ["緯度", "経度"]] = [d["port"]["lat"], d["port"]["lon"]]
     t["種別"] = t["種別"].replace({"station": "駅", "aeon": "イオン"})
     t["出発トリップ/日"] = t["出発トリップ/日"].round(1)
     return t

@@ -163,10 +163,13 @@ def main():
     if args.source == "auto":
         args.source = "xml" if osm_xml.exists() else "overpass"
 
-    dest_keys = list(cfg["destinations"])
+    # ポートのある目的地（駅・モビリティステーション）と、ポートの無い目的地（公園：入口まで徒歩）
+    all_keys = list(cfg["destinations"])
+    dest_keys = [k for k in all_keys if cfg["destinations"][k].get("port")]
+    walk_keys = [k for k in all_keys if k not in dest_keys]
     dports = pd.DataFrame([cfg["destinations"][k]["port"] for k in dest_keys])
-    # 施設入口は複数可（近い方を使う）。旧形式の entrance（1点）にも対応
-    ent_lists = [cfg["destinations"][k].get("entrances") or [cfg["destinations"][k]["entrance"]] for k in dest_keys]
+    # 施設入口は複数可（近い方を使う）。旧形式の entrance（1点）にも対応。並びは all_keys
+    ent_lists = [cfg["destinations"][k].get("entrances") or [cfg["destinations"][k]["entrance"]] for k in all_keys]
     dents = pd.DataFrame([e for el in ent_lists for e in el])
     ent_owner = np.array([i for i, el in enumerate(ent_lists) for _ in el])
     all_lat = np.concatenate([houses["lat"], dports["lat"], dents["lat"]])
@@ -216,11 +219,14 @@ def main():
     pe_ix, pe_off = snap(wlat, wlon, dports["lat"].to_numpy(), dports["lon"].to_numpy(), proj)
     en_ix, en_off = snap(wlat, wlon, dents["lat"].to_numpy(), dents["lon"].to_numpy(), proj)
     De = shortest(Aw, pe_ix)
-    E = np.array([min(De[d, en_ix[i]] + en_off[i] for i in np.flatnonzero(ent_owner == d)) + pe_off[d]
-                  for d in range(len(dest_keys))])
-    # 施設⇔施設の徒歩（入口どうしの最短。イオン⇔駅・公園⇔駅などの「徒歩だけ」の時間に使う）
+    E = np.array([min(De[d, en_ix[i]] + en_off[i] for i in np.flatnonzero(ent_owner == all_keys.index(k))) + pe_off[d]
+                  for d, k in enumerate(dest_keys)])
+    # 施設⇔施設の徒歩（入口どうしの最短。イオン⇔駅・公園⇔駅などの「徒歩だけ」の時間に使う）。並びは all_keys
     Den = shortest(Aw, en_ix)
-    nd = len(dest_keys)
+    nd = len(all_keys)
+    # 全徒歩ノード → ポートの無い目的地の入口（公園へ行くポートを画面で選ぶため）
+    DnW = np.column_stack([np.min(np.stack([Den[i] + en_off[i] for i in np.flatnonzero(ent_owner == all_keys.index(k))]), 0)
+                           for k in walk_keys]) if walk_keys else np.zeros((len(wlat), 0))
     DW = np.array([[min(Den[i, en_ix[j]] + en_off[i] + en_off[j]
                         for i in np.flatnonzero(ent_owner == a) for j in np.flatnonzero(ent_owner == b))
                     for b in range(nd)] for a in range(nd)])
@@ -236,7 +242,7 @@ def main():
     DR = (dd + dd.T) / 2 + db_off[:, None] + db_off[None, :]
     np.fill_diagonal(DR, 0.0)
 
-    for name, M in (("W", W), ("R", R), ("E", E), ("DW", DW), ("DR", DR)):
+    for name, M in (("W", W), ("R", R), ("E", E), ("DW", DW), ("DR", DR), ("DnW", DnW)):
         if not np.isfinite(M).all():
             bad = int((~np.isfinite(M)).sum())
             raise RuntimeError(f"{name} に到達不能な組が {bad} 件あります。bbox_buffer_m を広げてください。")
@@ -247,10 +253,13 @@ def main():
     to_dest = shortest(Ab.T.tocsr(), db_ix).T                       # 走行ノード → 目的地ポート
     from_dest = shortest(Ab, db_ix).T                               # 目的地ポート → 走行ノード
     Rn = (to_dest[nb_ix] + from_dest[nb_ix]) / 2 + nb_off[:, None] + db_off[None, :]
+    BB = shortest(Ab, np.arange(Ab.shape[0]))                       # 走行ノード⇔走行ノード（ポート⇔ポートの走行）
+    BB = np.where(np.isfinite(BB), (BB + BB.T) / 2, -1.0).astype(np.float32)
     usable = np.isfinite(Wn).all(0) & np.isfinite(Rn).all(1)
     print(f"  添付ポート評価用: 徒歩ノード {usable.sum()}/{len(usable)} が到達可能")
 
-    np.savez_compressed(out / "matrices.npz", W=W, R=R, E=E, DW=DW, DR=DR,
+    np.savez_compressed(out / "matrices.npz", W=W, R=R, E=E, DW=DW, DR=DR, DnW=DnW, BB=BB, nb_ix=nb_ix,
+                        nb_off=nb_off,
                         Wn=np.where(np.isfinite(Wn), Wn, -1.0), Rn=np.where(np.isfinite(Rn), Rn, -1.0))
     pd.DataFrame({"lat": wlat, "lon": wlon, "usable": usable}).to_csv(out / "walk_nodes.csv", index=False)
     hs = houses.copy()
@@ -263,6 +272,8 @@ def main():
         "source": args.source,
         "created_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
         "dest_keys": dest_keys,
+        "walk_dest_keys": walk_keys,
+        "all_dest_keys": all_keys,
         "houses_file": [str(p) for p in houses_files],
         "districts": houses["街区"].value_counts(sort=False).to_dict(),
         "is_sample": is_sample,
