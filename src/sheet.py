@@ -19,7 +19,7 @@ from . import present as _pr  # noqa: E402,F401（日本語フォントの設定
 from . import timesave as ts  # noqa: E402
 from .demand import DESTS  # noqa: E402
 from .engine import fleet_label  # noqa: E402
-from .plan import default_mix, demand_hourly, fleet_for, make_ops  # noqa: E402
+from .plan import default_mix, demand_hourly, fleet_for, make_ops, split_total  # noqa: E402
 from .present import GRAY, INK, LINE, MUTED, NAVY, ORANGE, PORT_COLORS, TEAL, to_png, to_pptx  # noqa: E402,F401
 from .study import annual_cost, min_fleet, month_eval  # noqa: E402
 from .ui import port_table  # noqa: E402
@@ -67,10 +67,16 @@ def compute_time_opt(net, cfg, survey, *, A: float, X: float, k: int, **kw) -> d
     t = round(1 - p["target"], 4)
     res = min_fleet(L, ops, *dem["平日"], targets=(t,), n_rep=len(specs) * p["passes"], seed=0, day_specs=specs)
     r = res[t]
-    out.update(cal=cal, source=source, sel=r)
-    if r is None:
-        return out
-    F = fleet_for(L, r["自転車"], r["キックボード"], *dem["平日"], ops, n_tr=r.get("4輪", 0))
+    oh = dem["平日"][0]
+    need_st = float(np.max(np.cumsum(oh[:, 0] - dem["平日"][1][:, 0])))    # 駅ポートに同時に置かれる台数の目安
+    out.update(cal=cal, source=source, sel=r, need_st=need_st)
+    if r is None:                               # 達成不可：利用希望をすべて受けられる台数で評価（参考）
+        n_ref = int(np.ceil(oh.sum() * 1.1))
+        nb, nk, ntr = split_total(n_ref, p["mix"])
+        out["ref"] = {"自転車": nb, "キックボード": nk, "4輪": ntr, "合計": n_ref}
+        F = fleet_for(L, nb, nk, *dem["平日"], ops, n_tr=ntr)
+    else:
+        F = fleet_for(L, r["自転車"], r["キックボード"], *dem["平日"], ops, n_tr=r.get("4輪", 0))
     ms, daily = month_eval(L, F, cfg, dem, month=p["month"], seed=1, cal=cal, **kw_ops)
     out.update(init=F.init, ms=ms, cost=annual_cost(cfg, F, L.k, daily, p["station_cap"]))
     return out
@@ -180,12 +186,14 @@ def sheet_time_opt(c, title: str, cond: str, roads=None):
     fig.text(0.03, 0.95, title, fontsize=24, weight="bold", color=INK, va="center")
     fig.text(0.03, 0.905, cond, fontsize=11, color=MUTED, va="center")
     fig.text(0.03, 0.855, "最適ポート配置", fontsize=18, weight="bold", color=INK, va="center")
-    p, sel, ms = c["params"], c.get("sel"), c.get("ms")
+    p, sel, ms, ref = c["params"], c.get("sel"), c.get("ms"), c.get("ref")
     w, gap, x0 = 0.225, 0.0133, 0.03
     vals = [("ポート数", f"{c['L'].k} か所", f"対象の住宅 {c['n_hh']}/{c['n_houses']}戸"),
             ("設置台数", f"{sel['合計']} 台" if sel else "達成不可",
-             (f"自転車{sel['自転車']}・キックボード{sel['キックボード']}・4輪{sel.get('4輪', 0)}" if sel else "")),
-            ("充足率", f"{ms['充足率']:.1%}" if ms else "—", f"目標 {p['target']:.0%}以上（1か月）"),
+             (f"自転車{sel['自転車']}・キックボード{sel['キックボード']}・4輪{sel.get('4輪', 0)}" if sel else
+              f"参考：{ref['合計']}台（自{ref['自転車']}・キ{ref['キックボード']}・4輪{ref['4輪']}）で評価" if ref else "")),
+            ("充足率", (f"{ms['充足率']:.1%}" if sel else f"最大 {ms['充足率']:.1%}") if ms else "—",
+             f"目標 {p['target']:.0%}以上（1か月）" + ("" if sel else "に届かない")),
             ("合計移動時間", f"{ms['合計移動時間(人・分/日)']:,.0f} 人・分/日" if ms else "—",
              (f"平均 {ms['平均移動時間(分/片道)']:.1f}分/片道（全員徒歩 {ms['全員徒歩の平均(分/片道)']:.1f}分）" if ms else ""))]
     for i, (lab, val, sub) in enumerate(vals):
@@ -205,6 +213,11 @@ def sheet_time_opt(c, title: str, cond: str, roads=None):
         bp["最大駐車(95%点)"] = [int(x) for x in bp["最大駐車(95%点)"]]
         bp = bp.rename(columns={"最大駐車(95%点)": "最大駐車(95%)", "キックボード": "キック"})
         _table(fig.add_axes([0.61, 0.035, 0.365, 0.28]), bp)
+        if not sel and ref:
+            fig.text(0.5, 0.86, f"※ 目標{p['target']:.0%}は達成できません：朝に駅へ着く車両が最大で約{c['need_st']:.0f}台、"
+                     f"駅西口ポートに同時に置かれます（収納{p['station_cap']}区画）。満車で返せない車両は夜まで使えないため、"
+                     f"台数を増やしても充足率が上がりません。地図・グラフ・表は参考の{ref['合計']}台での結果。",
+                     fontsize=10, color="#B42318", va="center", ha="left", wrap=True)
     else:
         fig.text(0.61, 0.5, "目標を満たす台数が見つかりませんでした（条件を満たす住宅が無い、または探索範囲を超える）。",
                  fontsize=12, color=INK, wrap=True)

@@ -61,7 +61,9 @@ def main():
         r, ms = c.get("sel"), c.get("ms")
         print(f"{cd['name']}: 対象{c['n_hh']}戸・ポート{c['S']}・"
               + (f"{r['合計']}台（自{r['自転車']}・キ{r['キックボード']}・4輪{r.get('4輪', 0)}）・充足率{ms['充足率']:.1%}・"
-                 f"合計移動{ms['合計移動時間(人・分/日)']:.0f}人・分/日" if ms else "達成不可"))
+                 f"合計移動{ms['合計移動時間(人・分/日)']:.0f}人・分/日" if r else
+                 f"達成不可（駅に同時に約{c.get('need_st', 0):.0f}台・参考{c['ref']['合計']}台で充足率{ms['充足率']:.1%}）"
+                 if ms else "達成不可"))
     if pngs:
         (out / "結果シート.pptx").write_bytes(sheet.to_pptx(pngs))
         from PIL import Image
