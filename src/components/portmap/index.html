@@ -1,0 +1,125 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="stylesheet" href="leaflet.css">
+<style>
+  html, body { margin: 0; padding: 0; background: #fff; font-family: "Hiragino Sans", "Noto Sans JP", "Yu Gothic", sans-serif; }
+  #map { width: 100%; height: 520px; }
+  .cand { background: #fff; border: 2px solid #1f3a93; border-radius: 4px; padding: 0 4px; font: 600 12px sans-serif;
+          white-space: nowrap; color: #1f3a93; box-shadow: 0 1px 3px rgba(0,0,0,.25); }
+  .cand.sel { background: #1f3a93; color: #fff; }
+  .dest { background: rgba(255,255,255,.9); border-radius: 3px; padding: 0 4px; font: 600 12px sans-serif; white-space: nowrap; }
+  #editor { position: absolute; z-index: 1000; display: none; background: #fff; border: 1px solid #c9ced6;
+            border-radius: 10px; padding: 12px 14px; box-shadow: 0 4px 14px rgba(0,0,0,.18); width: 170px; }
+  #editor .ttl { font-size: 14px; margin-bottom: 6px; color: #222; }
+  #editor .row { display: flex; align-items: center; gap: 6px; margin-bottom: 10px; }
+  #editor input { width: 100%; font-size: 16px; padding: 4px 6px; text-align: right; border: 1px solid #9aa3af; border-radius: 4px; }
+  #editor button { width: 100%; padding: 6px 0; font-size: 14px; font-weight: 700; border-radius: 6px; cursor: pointer; }
+  #ok { background: #1f6fd1; color: #fff; border: 1px solid #1f6fd1; margin-bottom: 6px; }
+  #cancel { background: #fff; color: #1f6fd1; border: 1.5px solid #1f6fd1; }
+  #hint { position: absolute; z-index: 999; left: 50px; top: 10px; background: rgba(255,255,255,.92); padding: 3px 8px;
+          border-radius: 4px; font-size: 12px; color: #444; }
+</style>
+</head>
+<body>
+<div id="map"></div>
+<div id="hint">地図をダブルクリックでポート候補地を追加／候補地をクリックで容量の変更・取り消し</div>
+<div id="editor">
+  <div class="ttl" id="ed_name">ポート容量</div>
+  <div class="row"><input id="cap" type="number" min="1" max="200" step="1"><span>台</span></div>
+  <button id="ok">OK</button>
+  <button id="cancel">CANCEL</button>
+</div>
+<script src="leaflet.js"></script>
+<script>
+// ---- Streamlit コンポーネントの通信（ライブラリなし） ----
+function send(type, data) { window.parent.postMessage(Object.assign({isStreamlitMessage: true, type: type}, data), "*"); }
+function setValue(v) { send("streamlit:setComponentValue", {value: v, dataType: "json"}); }
+
+let map = null, layerC = null, cands = [], ver = null, defCap = 5, editing = null, nonce = 0;
+
+function nextName() {
+  const used = new Set(cands.map(c => c.name));
+  let i = 1; while (used.has("地点" + i)) i++;
+  return "地点" + i;
+}
+function emit() { nonce += 1; setValue({cands: cands, nonce: nonce, ver: ver}); }
+
+function drawCands() {
+  layerC.clearLayers();
+  cands.forEach((c, i) => {
+    const sel = editing === i ? " sel" : "";
+    const m = L.marker([c.lat, c.lon], {icon: L.divIcon({className: "", iconAnchor: [-9, 10],
+      html: `<div class="cand${sel}">${c.name}・容量${c.cap}</div>`})}).addTo(layerC);
+    L.circleMarker([c.lat, c.lon], {radius: 5, color: "#1f3a93", weight: 2, fillColor: "#fff", fillOpacity: 1}).addTo(layerC);
+    m.on("click", () => openEditor(i));
+  });
+}
+function openEditor(i) {
+  editing = i;
+  const c = cands[i], p = map.latLngToContainerPoint([c.lat, c.lon]);
+  const ed = document.getElementById("editor");
+  document.getElementById("ed_name").textContent = `${c.name}：ポート容量`;
+  document.getElementById("cap").value = c.cap;
+  const W = map.getSize().x;
+  ed.style.left = Math.min(Math.max(p.x + 14, 4), W - 200) + "px";
+  ed.style.top = Math.max(p.y - 60, 4) + "px";
+  ed.style.display = "block";
+  drawCands();
+  setTimeout(() => document.getElementById("cap").select(), 30);
+}
+function closeEditor() { editing = null; document.getElementById("editor").style.display = "none"; drawCands(); }
+
+document.getElementById("ok").onclick = () => {
+  if (editing === null) return;
+  const v = parseInt(document.getElementById("cap").value, 10);
+  cands[editing].cap = isFinite(v) && v > 0 ? v : defCap;
+  closeEditor(); emit();
+};
+document.getElementById("cancel").onclick = () => {
+  if (editing === null) return;
+  cands.splice(editing, 1);
+  closeEditor(); emit();
+};
+document.getElementById("cap").addEventListener("keydown", e => { if (e.key === "Enter") document.getElementById("ok").click(); });
+
+function init(a) {
+  document.getElementById("map").style.height = a.height + "px";
+  map = L.map("map", {doubleClickZoom: false, zoomControl: true}).setView(a.center, a.zoom);
+  L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",
+              {maxZoom: 19, attribution: "&copy; OpenStreetMap contributors"}).addTo(map);
+  (a.houses || []).forEach(h => L.circleMarker(h, {radius: 3, color: "#fff", weight: 1, fillColor: "#8A93A6",
+                                                   fillOpacity: .8}).addTo(map));
+  (a.dests || []).forEach(d => {
+    L.circleMarker([d.lat, d.lon], {radius: 7, color: "#fff", weight: 2, fillColor: d.color, fillOpacity: 1}).addTo(map);
+    L.marker([d.lat, d.lon], {icon: L.divIcon({className: "", iconAnchor: [-10, 22],
+      html: `<div class="dest" style="color:${d.color}">${d.label}</div>`})}).addTo(map);
+  });
+  layerC = L.layerGroup().addTo(map);
+  map.on("dblclick", e => {
+    cands.push({name: nextName(), lat: e.latlng.lat, lon: e.latlng.lng, cap: defCap});
+    emit();
+    openEditor(cands.length - 1);
+  });
+  map.on("movestart", () => { if (editing !== null) closeEditor(); });
+  send("streamlit:setFrameHeight", {height: a.height + 4});
+}
+
+window.addEventListener("message", ev => {
+  const d = ev.data;
+  if (!d || d.type !== "streamlit:render") return;
+  const a = d.args;
+  defCap = a.default_cap || 5;
+  if (!map) init(a);
+  if (a.ver !== ver) {          // Python 側で候補地を入れ替えた（CLEAR・読み込み）
+    ver = a.ver;
+    cands = (a.cands || []).map(c => Object.assign({}, c));
+    if (editing !== null) closeEditor(); else drawCands();
+  }
+});
+send("streamlit:componentReady", {apiVersion: 1});
+</script>
+</body>
+</html>

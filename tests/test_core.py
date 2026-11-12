@@ -676,3 +676,19 @@ def test_demand_table():
     o, r = table_hourly(c, "park")
     assert abs(o.sum() - 19) < 0.01 and abs(table_hourly(c, "anytime")[1].sum() - 7) < 0.01
     assert oh[6, 0] > 50 * 0.12 and oh[3].sum() == 0
+
+
+def test_evaluate_candidates_choice():
+    """②改訂：候補地（容量つき）から上限以内の組み合わせを選ぶ。容量を超えて置かない。"""
+    from src import opt_multi as om
+    from src.loaders import load_survey, survey_path
+    net = _real_net()
+    c = {**CFG, "simulation": {**CFG["simulation"], "n_households": len(net.houses)}}
+    sv = load_survey(survey_path(c)[0], c)
+    cands = net.candidates.iloc[[80, 78, 60]][["lat", "lon"]].reset_index(drop=True).assign(name=["A", "B", "C"], cap=4)
+    r = om.evaluate_candidates(net, c, sv, cands, dests=["station", "aeon"], vehicles=["kickboard", "trans", "ebike"],
+                               target=0.99, k_max=2, conversion=0.12,
+                               dest_caps={"station": 25, "aeon": 5, "park": 5, "anytime": 5})
+    assert 1 <= r["L"].k <= 2 and len(r["table"]) == 6                # 1か所3通り＋2か所3通り
+    assert (r["init"][:r["L"].k].sum(1) <= 4).all() and r["init"][r["L"].k + 1].sum() <= 5
+    assert set(r["chosen"]) <= {"A", "B", "C"}

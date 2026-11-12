@@ -1,5 +1,9 @@
-"""② ポート配置評価：地図上でポートを選び、車種別の台数と収納可能台数を指定して、充足率・合計移動時間・費用を算出する。
-利用用途：1 住宅⇔駅・2 住宅⇔イオン（アンケート×転換率）、3 イオン⇔駅・4 公園⇔住宅・5 公園⇔駅（1日の回数を入力）。"""
+"""② ポート配置評価（2026-11 改訂）：地図をダブルクリックしてポート候補地と容量を置き、RUN で
+候補地の中から「ポート数上限」以内の組み合わせを選び（すべて容量まで埋めたときの充足率が最大のもの）、
+目標充足率を満たす最小台数を求める。
+
+固定条件（config の opt_time）：全街区230戸・夜間1回の再配置・手続き30秒・9〜11月の3か月・経路別の実測速度・
+用途ごとの使える車種。需要：住宅すべてが目的地ごとに1日1往復 × 転換率（低位12%・高位24%）。時間帯は需要表の形。"""
 from __future__ import annotations
 
 import json
@@ -9,451 +13,186 @@ import pandas as pd
 import streamlit as st
 from streamlit_folium import st_folium
 
-from src import purposes as pu
+from src import opt_multi as om
 from src import viz
-from src.custom_ports import ACCEPT, parse_ports, snap_ports
-from src.engine import EB, KB, TR, Fleet, allocate_fleet, fleet_label
-from src.export import save_ports
-from src.loaders import ROOT
-from src.plan import custom_layout, demand_hourly, make_ops, optimal_layout
-from src.study import annual_cost, month_eval
-from src.ui import (demand_sidebar, fresh_cfg, header_warnings, hourly_fig, load_or_stop, month_specs, ops_sidebar,
-                    port_table, purposes_sidebar)
-from src.weather_data import weather_path
+from src.engine import TYPES, fleet_label
+from src.portmap import portmap
+from src.ui import header_warnings, hourly_fig, load_or_stop
 
-BASE_CFG, SURVEY, NET, FLAGS, DATA_KEY = load_or_stop("eval")
-cfg = fresh_cfg(BASE_CFG)
-VT = ["自転車", "キックボード", "4輪"]                 # 表の車種の列（電動アシスト自転車・電動キックボード・4輪小型モビリティ）
-COLS = ["name", "lat", "lon", *VT, "収納"]
-MAX_SNAP_M = 300
-DEFAULT_CAP = int(BASE_CFG["service"].get("default_port_capacity", 10))
+BASE_CFG, SURVEY, NET, FLAGS, DATA_KEY = load_or_stop("eval", all_districts=True)
+cfg = BASE_CFG
+OC = cfg["opt_time"]
+ss = st.session_state
+ss.setdefault("ev3_cands", [])
+ss.setdefault("ev3_ver", 0)
+ss.setdefault("ev3_nonce", None)
+SCEN = {k: v for k, v in cfg.get("demand_scenarios", {}).items() if k.startswith(("低位", "高位"))}
 
 with st.sidebar:
-    st.header("条件")
-    st.subheader("需要")
-    spec = demand_sidebar(cfg, SURVEY, key_prefix="ev_", show_day=False)
-    USE_PU = pu.has_park(NET)
-    PSPEC = purposes_sidebar(cfg, key_prefix="ev_") if USE_PU else None
-    ops_spec = ops_sidebar(cfg, key_prefix="ev_", show_period=False)
+    st.header("目的地")
+    dests = [d for d in om.DEST_ALL if st.checkbox(om.DEST_LABEL[d], True, key=f"ev3_d_{d}")]
+    st.header("対象車両")
+    vehicles = [t for t in TYPES if st.checkbox(om.TYPE_LABEL[t], True, key=f"ev3_v_{t}")]
+    st.header("目標充足率")
+    target = st.slider("目標充足率", 50, 99, round(cfg["service"]["target_fulfillment"] * 100), 1, format="%d%%",
+                       key="ev3_target", label_visibility="collapsed") / 100
+    st.header("ポート数上限")
+    k_max = st.slider("ポート数上限", 1, cfg["simulation"]["max_ports"], 3, key="ev3_k", label_visibility="collapsed",
+                      help="候補地の中から、この数までの住宅側ポートを選びます。")
+    st.header("需要設定")
+    scen = st.selectbox("需要シナリオ", list(SCEN), key="ev3_scen", format_func=lambda n: f"{n}（転換率 {SCEN[n]:.0%}）")
+    conv = float(SCEN[scen])
+    st.header("目的地側ポートの容量")
+    c1, c2 = st.columns(2)
+    dcap = {"station": c1.number_input("南栗橋駅", 1, 300, int(cfg["station_port"]["max_slots"]), key="ev3_c_station"),
+            "aeon": c2.number_input("イオンスタイル", 1, 100, int(OC["port_cap"]), key="ev3_c_aeon"),
+            "park": c1.number_input("公園", 1, 100, int(OC["port_cap"]), key="ev3_c_park"),
+            "anytime": c2.number_input("エニタイム", 1, 100, int(OC["port_cap"]), key="ev3_c_anytime")}
+    st.caption("駅ポートは「必要容量」（上限なしで回したときの最大駐車）も表示します。")
+    with st.expander("固定の条件"):
+        st.markdown(
+            f"- 対象街区：既存街区＋新規街区（{len(NET.houses)}戸）\n"
+            f"- 運用：夜間に1回、初期配置に戻す\n"
+            f"- 手続き時間：{OC['procedure_sec']}秒\n"
+            f"- 検証期間：{'・'.join(f'{m}月' for m in OC['months'])}の3か月\n"
+            f"- 走行速度：走行経路ごとの実測値\n"
+            f"- 需要：住宅すべてが目的地ごとに1日1往復 × 転換率（時間帯は需要表の形）\n"
+            "- 利用用途と使える車種：\n"
+            + "\n".join(f"  - {p['id']}. {p['label']}：{'・'.join(om.TYPE_LABEL[v] for v in p['vehicles'])}"
+                        + ("（休日のみ）" if p["days"] == "休日" else "")
+                        + (f"（{p['per_day']:g}{'回' if p.get('one_way') else '往復'}/日で固定）" if "per_day" in p else "")
+                        for p in OC["purposes"]))
 
 st.title("② ポート配置評価")
-st.caption("地図をクリックして住宅側ポートを置き、表で車種別の台数と収納可能台数を指定すると、充足率・移動時間・年間費用を計算します。"
-           "クリック位置は最寄りの道路上の点に合わせます。")
 header_warnings(NET, FLAGS)
-if not USE_PU:
-    st.warning("事前計算結果に公園（destinations.park）がありません。`python scripts/precompute_network.py` を再実行すると、"
-               "利用用途 3〜5（イオン⇔駅・公園⇔住宅・公園⇔駅）を含めて計算できます。")
 
-P, conv = spec.purposes, spec.conversion
-oh_wd, rh_wd, sh = demand_hourly(SURVEY, cfg, conv, P, "平日", None, spec.station_share)
-oh_hd, rh_hd, _ = demand_hourly(SURVEY, cfg, conv, P, "休日", None, spec.station_share)
-if USE_PU:                                     # 用途 3〜5 を需要の列に足す
-    oh_wd, rh_wd = pu.with_flows(oh_wd, rh_wd, PSPEC, "平日")
-    oh_hd, rh_hd = pu.with_flows(oh_hd, rh_hd, PSPEC, "休日")
-oh, rh = oh_wd, rh_wd                          # 初期配置の自動配分は平日の需要で
-DEM = {"平日": (oh_wd, rh_wd), "休日": (oh_hd, rh_hd)}
-OPS_KW = dict(pattern=ops_spec.pattern, substitution=ops_spec.substitution, ebike_share=ops_spec.ebike_share,
-              procedure_sec=ops_spec.procedure_sec)
-ops = make_ops(cfg, weather="晴れ", **OPS_KW)
-CAL, SPECS, SOURCE = month_specs(cfg, ops_spec.year, ops_spec.month, DEM, OPS_KW)
-
-
-def with_purposes(L, assign, ports, park_port=None):
-    """用途 3〜5 の流れを加える（事前計算に公園が無ければそのまま）。park_port：公園へ行くときの住宅側ポート番号。"""
-    return pu.attach(NET, cfg, L, assign, ports, PSPEC, park_port) if USE_PU else L
-
-# ---------- 配置の状態（表の初期値＋版番号。版が変わると表を作り直す） ----------
-ss = st.session_state
-if "ev2_ports" not in ss:
-    ss.ev2_ports = pd.DataFrame(columns=COLS).astype({"name": str, "lat": float, "lon": float, "自転車": int,
-                                                      "キックボード": int, "4輪": int, "収納": int})
-    ss.ev2_ver = 0
-    ss.ev2_last_click = None
-    ss.ev2_station = (0, 0, 0)
-ss.setdefault("ev2_aeon", (0, 0, 0))
-if len(ss.ev2_station) < 3 or len(ss.ev2_aeon) < 3:     # 2車種のときの状態から
-    ss.ev2_station, ss.ev2_aeon = tuple(ss.ev2_station) + (0,), tuple(ss.ev2_aeon) + (0,)
-if "4輪" not in ss.ev2_ports:
-    ss.ev2_ports = ss.ev2_ports.assign(**{"4輪": 0})[COLS]
-UNITS = ops.units()                                     # 1台が使う区画（4輪は2区画）
-
-
-def used_slots(df) -> pd.Series:
-    return sum(df[c] * u for c, u in zip(VT, UNITS))
-
-
-def row_counts(F_init, j) -> tuple:
-    return tuple(int(F_init[j, t]) for t in range(3))
-
-
-def set_ports(df: pd.DataFrame, station=None, aeon=None):
-    df = df.copy()
-    for c in VT:
-        if c not in df:
-            df[c] = 0
-    if "収納" not in df:
-        df["収納"] = np.maximum(np.ceil(used_slots(df)).astype(int), int(ss.get("ev2_newcap", DEFAULT_CAP)))
-    ss.ev2_ports = df[COLS].reset_index(drop=True)
-    if station is not None:
-        ss.ev2_station = station
-    if aeon is not None:
-        ss.ev2_aeon = aeon
-    ss.ev2_ver += 1
+# ---------- ポート候補地入力 ----------
+st.subheader("ポート候補地入力")
+dest_pts = []
+for d, col in (("station", "#1f3a93"), ("aeon", "#e07a1f"), ("park", "#2e7d32"), ("anytime", "#7b1fa2")):
+    p = cfg["destinations"][d].get("port") or OC["dest_ports"][d]
+    dest_pts.append({"lat": p["lat"], "lon": p["lon"], "label": f"{om.DEST_LABEL[d]}ポート", "color": col})
+h = NET.houses
+center = [float(h["lat"].mean()) + 0.0008, float(h["lon"].mean()) + 0.0012]
+val = portmap(houses=h[["lat", "lon"]].round(6).values.tolist(), dests=dest_pts, cands=ss.ev3_cands, ver=ss.ev3_ver,
+              center=center, zoom=17, height=520, default_cap=int(OC["port_cap"]), key="ev3_portmap")
+if val and val.get("ver") == ss.ev3_ver and val.get("nonce") != ss.ev3_nonce:
+    ss.ev3_nonce = val["nonce"]
+    ss.ev3_cands = val["cands"]
+cands = pd.DataFrame(ss.ev3_cands, columns=["name", "lat", "lon", "cap"])
+b0, b1, b2 = st.columns([4, 1, 1])
+b0.caption(f"候補地 {len(cands)} か所" + ("：" + "、".join(f"{r.name}（容量{r.cap}）" for r in cands.itertuples())
+                                          if len(cands) else "（地図をダブルクリックして置いてください）"))
+if b1.button("CLEAR", use_container_width=True):
+    ss.ev3_cands, ss.ev3_ver, ss.ev3_key = [], ss.ev3_ver + 1, None
     st.rerun()
+run = b2.button("RUN", type="primary", use_container_width=True, disabled=not len(cands))
+st.divider()
+
+if not dests or not vehicles:
+    st.warning("目的地と対象車両を1つ以上選んでください。")
+    st.stop()
+act = om.active_purposes(cfg, dests, vehicles)
+if not act:
+    st.warning("選んだ目的地・車両で使える利用用途がありません（例：公園は電動アシスト自転車だけ）。")
+    st.stop()
+params = dict(dests=dests, vehicles=vehicles, target=target, k_max=int(k_max), conversion=conv,
+              dest_caps={k: float(v) for k, v in dcap.items()})
+pkey = json.dumps([params, cands.to_dict("records"), DATA_KEY, OC], ensure_ascii=False, default=str)
 
 
-def dest_table(init, k) -> pd.DataFrame:
-    return pd.DataFrame([("駅", "station", int(init[k].sum()), 0, ops_spec.station_cap),
-                         ("モビリティステーション", "aeon", int(init[k + 1].sum()), 0, ops_spec.aeon_cap)],
-                        columns=["ポート", "種別", "初期台数", "必要区画", "収納"])
+@st.cache_data(show_spinner="候補地の組み合わせを比べ、最小台数を探しています…（数十秒〜数分）")
+def compute(pkey_):
+    p, cs = json.loads(pkey_)[:2]
+    return om.evaluate_candidates(NET, cfg, SURVEY, pd.DataFrame(cs), **p)
 
 
-def next_name(df) -> str:
-    used = set(df["name"])
-    i = 1
-    while f"地点{i}" in used:
-        i += 1
-    return f"地点{i}"
+if run:
+    ss.ev3_key = pkey
+st.subheader("ポート選定結果")
+if ss.get("ev3_key") != pkey:
+    st.info("候補地を置き、条件を選んで **RUN** を押してください。" + ("（条件か候補地が変わりました）" if ss.get("ev3_key") else ""))
+    st.stop()
+R = compute(pkey)
+if R.get("error"):
+    st.warning(R["error"])
+    st.stop()
 
+ms, sel, ref, L = R["ms"], R.get("sel"), R.get("ref"), R["L"]
+n_hol = int((R["cal"]["曜日区分"] == "休日").sum())
+st.caption(f"選んだポート：{'・'.join(R['chosen'])}（{R['method']}）。検証期間：{'・'.join(f'{m}月' for m in OC['months'])}"
+           f"（平日{len(R['cal']) - n_hol}日・休日{n_hol}日、{R['source']}）。需要：{scen}（転換率{conv:.0%}）。")
+if sel is None:
+    st.error(f"目標充足率{target:.0%}は達成できません。選んだポートを容量まで埋めても、充足率は最大 {ms['充足率']:.1%} です。"
+             f"候補地・容量・ポート数上限を見直すか、目標充足率を下げてください。下の結果は、容量まで埋めた {ref['合計']}台での参考値です。")
+    sel = ref
+c1, c2, c3, c4 = st.columns(4)
+c1.metric("ポート数", f"{L.k}", border=True, help="選んだ住宅側ポートの数。このほかに目的地側のポートを使います。")
+c2.metric("駅ポート必要容量", f"{R['station_need']} 台", border=True,
+          help=f"上限なしで回したときの3か月の最大駐車台数（95%点）。計算に使った駅ポートの容量は{dcap['station']}台。")
+c3.metric("充足率", f"{ms['充足率']:.0%}" if not ref else f"最大 {ms['充足率']:.0%}", border=True,
+          help=f"{ms['充足率']:.1%}（目標 {target:.0%}以上、3か月）")
+c4.metric("平均短縮移動時間", f"{R['saving']:.1f} 分", border=True,
+          help=f"徒歩だけ {ms['全員徒歩の平均(分/片道)']:.1f}分 → 平均 {ms['平均移動時間(分/片道)']:.1f}分（片道、利用できなかった人は徒歩）")
+with st.container(border=True):
+    v1, v2, v3, v4 = st.columns(4)
+    v1.metric("合計車両台数", f"{sel['合計']} 台" + ("（参考）" if ref else ""))
+    v2.metric(om.TYPE_LABEL["ebike"], f"{sel['自転車']} 台")
+    v3.metric(om.TYPE_LABEL["kickboard"], f"{sel['キックボード']} 台")
+    v4.metric(om.TYPE_LABEL["trans"], f"{sel.get('4輪', 0)} 台")
 
-# 操作ボタン
-b1, b2, b3, b4 = st.columns([1.2, 1.4, 1.4, 0.8])
-with b1:
-    k_load = st.number_input("最適配置のポート数", 1, cfg["simulation"]["max_ports"], 3, key="ev2_kload")
-with b2:
-    st.write("")
-    if st.button("最適配置を読み込む", use_container_width=True,
-                 help="移動時間最短の位置。台数は下の「合計台数」を自動配分（駅ポートを含む）"):
-        L0, ports0, asg0 = optimal_layout(NET, cfg, sh, int(k_load), ops_spec.ebike_share, station_cap=ops_spec.station_cap)
-        if USE_PU:
-            L0 = with_purposes(L0, asg0, snap_ports(NET, NET.candidates.loc[list(ports0), ["lat", "lon"]]
-                                                    .reset_index(drop=True).assign(name="")))
-        F0 = allocate_fleet(L0, ops, int(ss.get("ev2_nb", 12)), int(ss.get("ev2_nk", 8)), oh, rh,
-                            n_tr=int(ss.get("ev2_nt", 4)))
-        c = NET.candidates.loc[list(ports0)]
-        cap0 = np.maximum(np.ceil(F0.init[:L0.k] @ UNITS).astype(int), int(ss.get("ev2_newcap", DEFAULT_CAP)))
-        set_ports(pd.DataFrame({"name": [f"P{j + 1}" for j in range(len(c))], "lat": c["lat"].to_numpy(),
-                                "lon": c["lon"].to_numpy(), "自転車": F0.init[:L0.k, EB], "キックボード": F0.init[:L0.k, KB],
-                                "4輪": F0.init[:L0.k, TR], "収納": cap0}),
-                  station=row_counts(F0.init, L0.k), aeon=row_counts(F0.init, L0.k + 1))
-with b3:
-    up = st.file_uploader("ファイルから読み込む", type=ACCEPT, key="ev2_upload", label_visibility="collapsed")
-    if up is not None and ss.get("ev2_upload_done") != (up.name, up.size):
-        try:
-            p = parse_ports(up.name, up.getvalue())
-            ss.ev2_upload_done = (up.name, up.size)
-            set_ports(p.assign(自転車=int(ss.get("ev2_newb", 3)), キックボード=int(ss.get("ev2_newk", 2)),
-                               **{"4輪": int(ss.get("ev2_newt", 1))}, 収納=int(ss.get("ev2_newcap", DEFAULT_CAP))))
-        except Exception as e:  # noqa: BLE001
-            st.error(f"{up.name} を読み込めませんでした：{e}")
-with b4:
-    st.write("")
-    if st.button("全削除", use_container_width=True):
-        set_ports(ss.ev2_ports.iloc[0:0], station=(0, 0, 0), aeon=(0, 0, 0))
-
-# ポート表
-edited = st.data_editor(
-    ss.ev2_ports, key=f"ev2_editor_{ss.ev2_ver}", num_rows="dynamic", hide_index=True, use_container_width=True,
-    column_config={"name": st.column_config.TextColumn("名称"),
-                   "lat": st.column_config.NumberColumn("緯度", format="%.6f"),
-                   "lon": st.column_config.NumberColumn("経度", format="%.6f"),
-                   "自転車": st.column_config.NumberColumn("電動アシスト自転車（台）", min_value=0, step=1, format="%d"),
-                   "キックボード": st.column_config.NumberColumn("電動キックボード（台）", min_value=0, step=1, format="%d"),
-                   "4輪": st.column_config.NumberColumn("4輪小型モビリティ（台）", min_value=0, step=1, format="%d"),
-                   "収納": st.column_config.NumberColumn("配置可能台数（収納・区画）", min_value=1, step=1, format="%d",
-                                                        help="ポートの区画数。自転車・キックボードは1台1区画、"
-                                                             f"4輪は1台{UNITS[TR]:g}区画。満車なら返却失敗")})
-edited = edited.dropna(subset=["lat", "lon"]).reset_index(drop=True)
-for c in VT:
-    edited[c] = edited[c].fillna(0).astype(int)
-edited["収納"] = edited["収納"].fillna(DEFAULT_CAP).astype(int)
-edited["name"] = [n if isinstance(n, str) and n else f"地点{i + 1}" for i, n in enumerate(edited["name"])]
-over = used_slots(edited) > edited["収納"]
-if over.any():
-    st.warning("台数が収納可能台数を超えています（初期配置で返却失敗が起きやすくなります）："
-               + "、".join(edited.loc[over, "name"].astype(str)))
-
-s0, s1, s2, s3 = st.columns([0.9, 1, 1, 1])
-s0.markdown("**駅ポート初期**")
-st_init = (s1.number_input("自転車", 0, 200, int(ss.ev2_station[0]), key=f"ev2_seb_{ss.ev2_ver}"),
-           s2.number_input("キックボード", 0, 200, int(ss.ev2_station[1]), key=f"ev2_skb_{ss.ev2_ver}"),
-           s3.number_input("4輪", 0, 200, int(ss.ev2_station[2]), key=f"ev2_str_{ss.ev2_ver}"))
-a0, a1, a2, a3 = st.columns([0.9, 1, 1, 1])
-a0.markdown("**モビリティステーション初期**", help="イオン→駅の片道利用の出発に使う車両。自動配分でも置きます。")
-ae_init = (a1.number_input("自転車", 0, 200, int(ss.ev2_aeon[0]), key=f"ev2_aeb_{ss.ev2_ver}"),
-           a2.number_input("キックボード", 0, 200, int(ss.ev2_aeon[1]), key=f"ev2_akb_{ss.ev2_ver}"),
-           a3.number_input("4輪", 0, 200, int(ss.ev2_aeon[2]), key=f"ev2_atr_{ss.ev2_ver}"))
-t0, t1, t2, t2b, t3 = st.columns([0.9, 1, 1, 1, 1.4])
-t0.markdown("**自動配分の合計**")
-nb_tot = t1.number_input("自転車", 0, 300, 12, key="ev2_nb")
-nk_tot = t2.number_input("キックボード", 0, 300, 8, key="ev2_nk")
-nt_tot = t2b.number_input("4輪", 0, 300, 4, key="ev2_nt")
-with t3:
-    st.write("")
-    auto = st.button("台数を自動配分（駅ポート・モビリティステーション含む）", use_container_width=True,
-                     disabled=edited.empty)
-
-# 公園へ行くときのポート（用途4・5）：置いたポートの中から選ぶ
-PARK_NONE = "（選ばない：用途4・5は計算しない）"
-if USE_PU:
-    _opts = [PARK_NONE] + [n for n in edited["name"]]
-    if ss.get("ev2_park") not in _opts:
-        ss["ev2_park"] = PARK_NONE
-    park_name = st.selectbox("公園へ行くときのポート（用途 4 公園⇔住宅・5 公園⇔駅）", _opts, key="ev2_park",
-                             help="公園には固定のポートを置きません。置いたポートの中から、公園へ行く人が使うポートを選びます"
-                                  "（ポートから公園の入口までは徒歩）。そのポートを自宅側でも使う住宅は、公園へは歩いて行きます。")
-else:
-    park_name = PARK_NONE
-
-# ---------- 計算 ----------
-result = None
-if not edited.empty:
-    snapped = snap_ports(NET, edited)
-    far = snapped["snap_m"] > MAX_SNAP_M
-    if far.any():
-        st.warning(f"道路網から{MAX_SNAP_M}m以上離れた地点は計算から除外しました：" + "、".join(snapped.loc[far, "name"]))
-    use = snapped[~far].reset_index(drop=True)
-    if len(use):
-        L, assign = custom_layout(NET, cfg, use, sh, ops_spec.ebike_share, station_cap=ops_spec.station_cap)
-        park_idx = list(use["name"]).index(park_name) if park_name in list(use["name"]) else None
-        if USE_PU:
-            L = with_purposes(L, assign, use, park_idx)
-            if park_idx is None and (PSPEC["park_house"]["per_day"] or PSPEC["park_station"]["per_day"]):
-                st.info("用途4・5（公園）は、上の「公園へ行くときのポート」を選ぶと計算に入ります。")
-        if auto:
-            F0 = allocate_fleet(L, ops, int(nb_tot), int(nk_tot), oh, rh, n_tr=int(nt_tot))
-            set_ports(pd.concat([use.assign(自転車=F0.init[:L.k, EB], キックボード=F0.init[:L.k, KB],
-                                            **{"4輪": F0.init[:L.k, TR]}), snapped[far]])[COLS],
-                      station=row_counts(F0.init, L.k), aeon=row_counts(F0.init, L.k + 1))
-        init = np.zeros((L.nport, 3), dtype=int)
-        init[:L.k] = use[VT].to_numpy()
-        init[L.k] = st_init
-        init[L.k + 1] = ae_init
-        F = Fleet(init)
-        if sum(F.n) == 0:
-            st.info("台数を入力してください。")
-        else:
-            _wp = weather_path(cfg)
-            key = json.dumps([DATA_KEY, _wp.stat().st_mtime if _wp.exists() else 0, cfg, spec.key(), ops_spec.key(),
-                              use[COLS].to_dict("list"), init.tolist(), PSPEC, park_name],
-                             ensure_ascii=False, default=str)
-
-            @st.cache_data(show_spinner="シミュレーション中…")
-            def evaluate(key_):
-                ms, dl = month_eval(L, F, cfg, DEM, month=ops_spec.month, seed=1, cal=CAL, **OPS_KW)
-                return ms, dl, annual_cost(cfg, F, L.k, dl, ops_spec.station_cap)
-
-            m_sum, daily, cost = evaluate(key)
-            result = m_sum
-
-# ---------- 結果：最適ポート配置（指標4つ → 左：ポート場所の地図／右：時間帯別・ポートごと → 詳細） ----------
-st.subheader("最適ポート配置")
-if result is not None:
-    n_hol = int((CAL["曜日区分"] == "休日").sum())
-    period_txt = f"{ops_spec.year}年{ops_spec.month}月の1か月（平日{len(CAL) - n_hol}日・休日{n_hol}日、{SOURCE}）"
-    st.caption(f"計算期間：{period_txt}")
-    nb, nk, ntr = F.n
-k1, k2, k3, k4 = st.columns(4)
-if result is not None:
-    k1.metric("ポート数", f"{L.k} か所", border=True,
-              help="住宅側ポートの数（このほかに駅西口ポート・モビリティステーション" + ("・公園ポート" if USE_PU else "") + "）")
-    k2.metric("設置台数", f"{nb + nk} 台", border=True,
-              help=f"電動アシスト自転車{nb}台＋電動キックボード{nk}台＋4輪小型モビリティ{ntr}台"
-                   f"（うち駅ポート初期 {sum(st_init)}台・モビリティステーション初期 {sum(ae_init)}台）")
-    k3.metric("充足率", f"{result['充足率']:.1%}", border=True,
-              help=f"貸出失敗率 {result['貸出失敗率']:.1%}（往路・復路の合計）")
-    k4.metric("合計移動時間（人・分/日）", f"{result['合計移動時間(人・分/日)']:,.0f} 分", border=True,
-              help="1日に全員が移動にかかった時間の合計（徒歩・モビリティ利用・利用できず徒歩を含む）",
-              delta=f"{result['平均移動時間(分/片道)'] - result['全員徒歩の平均(分/片道)']:+.1f} 分/片道（全員徒歩比）",
-              delta_color="inverse")
-else:
-    for c_, lab_ in zip((k1, k2, k3, k4), ("ポート数", "設置台数", "充足率", "合計移動時間")):
-        c_.metric(lab_, "—", border=True)
-
+init = R["init"]
+cs = R["cands"].iloc[R["S"]].reset_index(drop=True)
 left, right = st.columns([3, 2], gap="medium")
 with left:
-    st.subheader("ポート場所")
-    if result is not None:
-        main = use.rename(columns={"name": "label"}).assign(
-            初期台数=use[VT].sum(1), 必要区画=use["収納"],
-            内訳=[fleet_label(r_) for r_ in use[VT].to_numpy()])
-        asg = assign
-    else:
-        main = pd.DataFrame(columns=["label", "lat", "lon", "初期台数", "必要区画", "収納"])
-        asg = np.zeros(len(NET.houses), dtype=int)
-    _init0 = np.zeros((5, 3), dtype=int)
-    _init0[0], _init0[1] = st_init, ae_init
-    dest_tbl = dest_table(_init0, 0)
-    m = viz.port_map(NET.houses, NET.candidates, main, asg, dest_tbl, cfg, main_name="選択したポート", square=True,
-                     color_houses=result is not None)
-    out = st_folium(m, height=560, use_container_width=True, key="ev2_map", returned_objects=["last_clicked"])
-    st.caption("地図をクリックすると住宅側ポートを追加します。ラベル：自＝電動アシスト自転車、キ＝電動キックボード、"
-               "4輪＝4輪小型モビリティの"
-               "初期台数 / 収納可能台数。住宅の色は使うポート。")
-    with st.expander("クリックで追加するポートの台数"):
-        n1, n2, n3 = st.columns(3)
-        new_b = n1.number_input("自転車", 0, 100, 3, key="ev2_newb")
-        new_k = n2.number_input("キックボード", 0, 100, 2, key="ev2_newk")
-        new_t = n2.number_input("4輪", 0, 100, 1, key="ev2_newt")
-        new_cap = n3.number_input("配置可能台数", 1, 200, DEFAULT_CAP, key="ev2_newcap",
-                                  help="ポートに置ける最大台数（区画数）。満車のポートには返却できません。")
-click = (out or {}).get("last_clicked")
-if click and (click["lat"], click["lng"]) != ss.ev2_last_click:
-    ss.ev2_last_click = (click["lat"], click["lng"])
-    pt_df = pd.DataFrame({"name": [next_name(edited)], "lat": [click["lat"]], "lon": [click["lng"]]})
-    sn = snap_ports(NET, pt_df).iloc[0]
-    if sn["snap_m"] > MAX_SNAP_M:
-        st.warning("クリック位置が街区の道路網から離れすぎています。")
-    else:
-        node = NET.nodes.loc[sn["node"]]
-        set_ports(pd.concat([edited, pd.DataFrame({"name": [sn["name"]], "lat": [node["lat"]], "lon": [node["lon"]],
-                                                   "自転車": [int(new_b)], "キックボード": [int(new_k)],
-                                                   "4輪": [int(new_t)],
-                                                   "収納": [int(new_cap)]})], ignore_index=True),
-                  station=tuple(map(int, st_init)), aeon=tuple(map(int, ae_init)))
-
+    st.subheader("選定ポート場所")
+    main = cs[["lat", "lon"]].assign(label=list(cs["name"]), 初期台数=init[:L.k].sum(1), 必要区画=L.caps[:L.k].astype(int),
+                                     収納=L.caps[:L.k].astype(int), 内訳=[fleet_label(init[j]) for j in range(L.k)])
+    dest_tbl = pd.DataFrame([("駅", "station", int(init[L.k].sum()), 0, dcap["station"]),
+                             ("モビリティステーション", "aeon", int(init[L.k + 1].sum()), 0, dcap["aeon"])],
+                            columns=["ポート", "種別", "初期台数", "必要区画", "収納"])
+    others = cands[~cands["name"].isin(R["chosen"])].rename(columns={"name": "label"})
+    overlays = {f"{om.DEST_LABEL[d]}ポート": pd.DataFrame([{"label": f"{om.DEST_LABEL[d]}ポート（容量{dcap[d]}）",
+                                                          **OC["dest_ports"][d]}])
+                for d in ("park", "anytime") if d in R["dests"]}
+    m = viz.port_map(NET.houses, NET.candidates.iloc[0:0], main, R["assign"], dest_tbl, cfg, main_name="選定ポート",
+                     square=True, overlays=overlays or None)
+    st_folium(m, height=500, use_container_width=True, returned_objects=[], key="ev3_resmap")
+    st.caption("色つき＝住宅（色は使うポート）。点線の丸＝公園・エニタイムのポート。"
+               "ラベル：自＝電動アシスト自転車、キ＝電動キックボード、4輪＝4輪モビリティの初期台数 / 収納"
+               + (f"。選ばれなかった候補地：{'、'.join(others['label'])}" if len(others) else ""))
 with right:
-    if result is None:
-        st.info("地図をクリックするか、「最適配置を読み込む」「ファイルから読み込む」でポートを置いてください。")
-    else:
-        st.markdown("**時間帯別の利用希望と充足**")
-        fig_h = hourly_fig(result["_hourly"])
-        if fig_h is not None:
-            st.plotly_chart(fig_h, use_container_width=True)
-        st.markdown("**ポートごと**")
-        bp = port_table([n + ("（公園用）" if i == park_idx else "") for i, n in enumerate(use["name"])], use["収納"], F.init, L.caps, L.k, result["ポート別最大駐車(95%点)"], assign,
-                        ops_spec.station_cap)
-        st.dataframe(bp, hide_index=True, use_container_width=True)
-        st.caption("最大駐車が収納と同じなら、満車による返却失敗が起きています。")
-        if st.button("この配置と結果を data/output に保存"):
-            name = f"evaluated_mix_{ops_spec.pattern}_conv{round(conv * 100)}"
-            csv, gj = save_ports(bp.iloc[:L.k].assign(緯度=use["lat"], 経度=use["lon"], 収納=use["収納"].to_numpy())
-                                 .rename(columns={"ポート": "name"}),
-                                 name, cfg)
-            st.success(f"保存しました：`{csv.relative_to(ROOT)}` と `{gj.relative_to(ROOT)}`")
+    st.markdown("**時間帯別の利用希望と充足**")
+    fig = hourly_fig(ms["_hourly"])
+    if fig is not None:
+        st.plotly_chart(fig, use_container_width=True)
+    st.markdown("**ポートごと**")
+    peaks = ms["ポート別最大駐車(95%点)"]
+    names = list(cs["name"]) + ["駅西口ポート", "モビリティステーション"] + \
+        [f"{om.DEST_LABEL[d]}ポート" for d in R["dests"] if d not in ("station", "aeon")]
+    cover = list(np.bincount(R["assign"][R["assign"] >= 0], minlength=L.k)) + [None] * (len(names) - L.k)
+    st.dataframe(pd.DataFrame({"ポート": names, "自転車": init[:, 0], "キックボード": init[:, 1], "4輪": init[:, 2],
+                               "収納": [("上限なし" if not np.isfinite(c) else f"{int(c)}") for c in L.caps],
+                               "最大駐車(95%点)": peaks[:len(names)],
+                               "カバー戸数": [("—" if c is None else str(int(c))) for c in cover]}),
+                 hide_index=True, use_container_width=True)
+    st.caption("台数は毎晩戻す初期配置。最大駐車が収納と同じなら、満車で返せないことがあります。")
 
-# ---------- 詳細 ----------
-if result is not None:
-    with st.expander("詳細（返却失敗・年間費用・利用用途ごと）", expanded=False):
-        d1, d2, d3 = st.columns(3)
-        d1.metric("返却失敗率", f"{result['返却失敗率']:.1%}", help="到着ポートが満車で返却できなかった割合（区画外に一時駐車）")
-        d2.metric("年間総費用", f"{cost['年間総費用'] / 1e4:,.0f} 万円",
-                  help=f"1トリップあたり {cost['1トリップあたり費用']:,.0f} 円")
-        d3.metric("代替乗車率", f"{result['代替乗車率']:.1%}")
-        st.caption(f"駅ポート最大在庫 {result['駅ポート最大在庫']}台／容量{ops_spec.station_cap}台・"
-                   f"リバランス {result['作業回数/日']:.1f}回/日（{result['移動台数/日']:.1f}台・{result['作業時間(分/日)']:.0f}分）・"
-                   f"電池交換 {result['電池交換/日']:.2f}回/日・稼働率 {result['稼働率(回/台/日)']:.2f}回/台/日")
-        pur = result.get("_用途別") or {}
-        e1, e2 = st.columns([3, 2])
-        if pur:
-            with e1:
-                st.markdown("**利用用途ごと（片道ごとに数えた1日平均）**")
-                order = ["住宅⇔駅", "住宅⇔イオン", "イオン⇔駅", "公園⇔住宅", "公園⇔駅"]
-                when = {"公園⇔住宅": "休日のみ", "公園⇔駅": "休日のみ"}
-                n_hol_ = max(n_hol, 1)
-                rows_ = []
-                for lab in order:
-                    if lab not in pur:
-                        continue
-                    r_ = pur[lab]
-                    per_hol = f"{r_['利用希望/日'] * len(CAL) / n_hol_:.1f}" if lab in when else "—"
-                    rows_.append({"用途": lab, "曜日": when.get(lab, "毎日"), "利用希望（回/日）": r_["利用希望/日"],
-                                  "うち休日1日あたり": per_hol, "利用（回/日）": r_["利用/日"], "充足率": r_["充足率"]})
-                st.dataframe(pd.DataFrame(rows_).style.format({"利用希望（回/日）": "{:.1f}", "利用（回/日）": "{:.1f}",
-                                                                 "充足率": "{:.1%}"}),
-                             hide_index=True, use_container_width=True)
-                st.caption("回/日は1か月の平均（休日のみの用途は平日を0として平均）。気象による需要の増減と、"
-                           "往復の用途で行きに乗れなかった人（帰りも徒歩）を含みます。")
-        with e2:
-            keys = ["車両（償却）", "車両維持", "ポート（償却）", "用地", "人件費（リバランス）", "軽トラック"]
-            st.markdown("**年間費用の内訳**")
-            st.dataframe(pd.DataFrame({"項目": keys + ["年間総費用"], "円/年": [cost[x] for x in keys + ["年間総費用"]]})
-                         .style.format({"円/年": "{:,.0f}"}), hide_index=True, use_container_width=True)
-
-# ---------- 候補地から最良の組み合わせを選ぶ ----------
-st.divider()
-st.subheader("候補地から、充足率が最大になる組み合わせを選ぶ")
-st.caption("上の表を「候補地の一覧」とみなし（各地点の「配置可能台数」＝収納可能台数）、合計台数と使うポート数を決めて、"
-           "どの候補地を使えば充足率が最大になるかを比べます。台数は配置可能台数の範囲で自動配分（駅ポートを含む）。"
-           "比較は選んだ月の暦（平日・休日・天気、利用用途 3〜5 を含む）で60日分、選んだ組み合わせは「表に反映」すると"
-           "上で1か月の評価ができます。")
-if edited.empty or not len(use):
-    st.info("先に地図のクリックなどで候補地を2か所以上置いてください。")
-else:
-    from src.candidates import best_subsets
-    if "ev2_cands" in ss:
-        st.info(f"表は組み合わせの結果を反映した状態です（候補地 {len(ss.ev2_cands)} か所）。")
-        if st.button("候補地の一覧に戻す"):
-            cands0 = ss.pop("ev2_cands")
-            set_ports(cands0)
-    cands = use[["name", "lat", "lon", "収納", "node", "snap_m"]].reset_index(drop=True)
-    g1, g2, g3 = st.columns([1, 1, 1.4])
-    n_total = g1.number_input("合計台数（自転車＋キックボード＋4輪）", 1, 300, max(1, int(nb_tot + nk_tot + nt_tot)),
-                              key="ev2_cmb_n", help="希望の車種の割合（サイドバー）で3車種に分けます")
-    m_use = g2.number_input("使うポート数", 1, max(1, len(cands)), min(3, len(cands)), key="ev2_cmb_m")
-    with g3:
-        st.write("")
-        run = st.button("組み合わせを比較する", type="primary", use_container_width=True, disabled=len(cands) < 1)
-    cap_sum = int(cands["収納"].sum()) + int(ops_spec.station_cap)
-    if n_total > cap_sum:
-        st.warning(f"合計台数が、候補地すべての配置可能台数＋駅ポート（{cap_sum}台）を超えています。")
-    if run:
-        bar = st.progress(0.0, text="組み合わせを計算中…")
-        df, method = best_subsets(NET, cfg, cands, int(m_use), int(n_total), ops_spec.ebike_share, sh, oh, rh, ops,
-                                  ops_spec.station_cap, progress=lambda f: bar.progress(min(f, 1.0), text="組み合わせを計算中…"),
-                                  pspec=PSPEC, day_specs=SPECS, park_name=None if park_name == PARK_NONE else park_name)
-        bar.empty()
-        ss.ev2_cmb = (df, method, int(n_total), int(m_use),
-                      (tuple(cands["name"]), json.dumps(PSPEC, sort_keys=True), park_name, ops_spec.key()))
-    if ss.get("ev2_cmb") and ss.ev2_cmb[4] == (tuple(cands["name"]), json.dumps(PSPEC, sort_keys=True), park_name,
-                                               ops_spec.key()):
-        df, method, n_done, m_done, _ = ss.ev2_cmb
-        best = df.iloc[0]
-        idx = list(best["_idx"])
-        chosen = cands.iloc[idx].reset_index(drop=True)
-        binit, bk = best["_init"], len(idx)
-        nb_b, nk_b, nt_b = (int(binit[:, t].sum()) for t in range(3))
-        st.markdown("#### 最良の組み合わせ（最適ポート配置）")
-        st.caption(f"{method}。比較は選んだ月の暦で60日分（上の1か月評価とは日数が違うため、値は少し異なります）。")
-        q1, q2, q3, q4 = st.columns(4)
-        q1.metric("ポート数", f"{bk} か所", border=True, help=f"使うポート：{best['使うポート']}")
-        q2.metric("設置台数", f"{nb_b + nk_b} 台", border=True,
-                  help=f"電動アシスト自転車{nb_b}台＋電動キックボード{nk_b}台＋4輪{nt_b}台（駅ポート初期 {int(binit[bk].sum())}台・"
-                       f"モビリティステーション初期 {int(binit[bk + 1].sum())}台を含む）")
-        q3.metric("充足率", f"{best['充足率']:.1%}", border=True, help=f"返却失敗率 {best['返却失敗率']:.1%}")
-        q4.metric("合計移動時間（人・分/日）", f"{best['合計移動時間(人・分/日)']:,.0f} 分", border=True,
-                  help=f"平均 {best['平均移動時間(分/片道)']:.1f} 分/片道")
-        if best["置けた台数"] < n_done:
-            st.warning(f"配置可能台数が足りず、{n_done}台のうち{best['置けた台数']}台しか置けませんでした。")
-        cl, cr = st.columns([3, 2], gap="medium")
-        with cl:
-            st.subheader("ポート場所")
-            bmain = chosen.rename(columns={"name": "label"}).assign(
-                初期台数=binit[:bk].sum(1), 必要区画=chosen["収納"], 収納=chosen["収納"],
-                内訳=[fleet_label(binit[j_]) for j_ in range(bk)])
-            bm = viz.port_map(NET.houses, NET.candidates.iloc[0:0], bmain, best["_assign"], dest_table(binit, bk),
-                              cfg, main_name="最良の組み合わせ", square=True)
-            st_folium(bm, height=540, use_container_width=True, key="ev2_cmb_map", returned_objects=[])
-            st.caption(f"シミュレーションで選ばれた最良の組み合わせ（候補地{len(cands)}か所のうち{bk}か所）だけを表示。"
-                       "ラベル：自＝自転車、キ＝キックボードの初期台数 / 収納。住宅の色は使うポート。")
-        with cr:
-            st.markdown("**時間帯別の利用希望と充足**")
-            fig_b = hourly_fig(best["_hourly"])
-            if fig_b is not None:
-                st.plotly_chart(fig_b, use_container_width=True, key="ev2_cmb_hourly")
-            st.markdown("**ポートごと**")
-            st.dataframe(port_table(chosen["name"], chosen["収納"], binit, best["_caps"], bk, best["_peaks"],
-                                    best["_assign"], ops_spec.station_cap), hide_index=True, use_container_width=True)
-        with st.expander(f"組み合わせの比較（上位{min(20, len(df))}件）"):
-            show = df.drop(columns=[c_ for c_ in df.columns if str(c_).startswith("_")]).head(20).copy()
-            show.insert(0, "順位", range(1, len(show) + 1))
-            st.dataframe(show.style.format({"充足率": "{:.1%}", "平均移動時間(分/片道)": "{:.1f}", "返却失敗率": "{:.1%}",
-                                            "合計移動時間(人・分/日)": "{:,.0f}"}),
-                         hide_index=True, use_container_width=True)
-        if st.button("最良の組み合わせを表に反映（1か月で評価）"):
-            ss.ev2_cands = edited.copy()
-            init = binit
-            set_ports(pd.DataFrame({"name": chosen["name"], "lat": chosen["lat"], "lon": chosen["lon"],
-                                    "自転車": init[:len(idx), EB], "キックボード": init[:len(idx), KB],
-                                    "4輪": init[:len(idx), TR], "収納": chosen["収納"]}),
-                      station=row_counts(init, len(idx)), aeon=row_counts(init, len(idx) + 1))
+with st.expander("詳細（利用用途ごと・組み合わせの比較・費用）"):
+    pur = ms.get("_用途別") or {}
+    rows = []
+    for p in R["purposes"]:
+        r_ = pur.get(p["label"])
+        rows.append({"用途": f"{p['id']}. {p['label']}",
+                     "使える車種": "・".join(om.TYPE_LABEL[v] for v in p["vehicles"] if v in vehicles),
+                     "利用希望（回/日）": r_["利用希望/日"] if r_ else 0.0, "利用（回/日）": r_["利用/日"] if r_ else 0.0,
+                     "充足率": r_["充足率"] if r_ else None})
+    st.dataframe(pd.DataFrame(rows).style.format({"利用希望（回/日）": "{:.1f}", "利用（回/日）": "{:.1f}", "充足率": "{:.1%}"},
+                                                 na_rep="—"), hide_index=True, use_container_width=True)
+    st.markdown("**候補地の組み合わせ（容量まで埋めたときの充足率の順）**")
+    st.dataframe(R["table"].head(20).style.format({"充足率（容量まで埋めたとき）": "{:.1%}", "平均移動時間(分/片道)": "{:.1f}"}),
+                 hide_index=True, use_container_width=True)
+    d1, d2, d3 = st.columns(3)
+    d1.metric("年間総費用（目安）", f"{R['cost']['年間総費用'] / 1e4:,.0f} 万円")
+    d2.metric("返却失敗率", f"{ms['返却失敗率']:.1%}")
+    d3.metric("代替乗車率", f"{ms['代替乗車率']:.1%}")
