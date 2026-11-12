@@ -221,11 +221,11 @@ def sheet_time_opt(c, title: str, cond: str, roads=None):
         for (r_, c_), cell in t.get_celld().items():
             cell.set_width(widths[c_])
         if not sel and ref:
-            fig.text(0.205, 0.845, f"※ 目標{p['target']:.0%}は達成できません。朝に駅へ着く車両が最大で約{c['need_st']:.0f}台、"
-                     f"駅西口ポートに同時に置かれます（収納{p['station_cap']}区画）。満車で返せない車両は夜まで使えないため、"
-                     f"台数を増やしても充足率が上がりません。\n　 地図・グラフ・表は、利用希望をすべて受けられる台数"
+            fig.text(0.205, 0.848, f"※ 目標{p['target']:.0%}は達成できません。朝に駅へ着く車両が最大で約{c['need_st']:.0f}台、"
+                     f"駅西口ポートに同時に置かれます（収納{p['station_cap']}区画）。\n　 満車で返せない車両は夜まで使えないため、"
+                     f"台数を増やしても充足率が上がりません。地図・グラフ・表は、利用希望をすべて受けられる台数"
                      f"（参考 {ref['合計']}台）での結果です。",
-                     fontsize=10.5, color="#B42318", va="center", ha="left", linespacing=1.4)
+                     fontsize=10, color="#B42318", va="center", ha="left", linespacing=1.35)
     else:
         fig.text(0.61, 0.5, "目標を満たす台数が見つかりませんでした（条件を満たす住宅が無い、または探索範囲を超える）。",
                  fontsize=12, color=INK, wrap=True)
