@@ -32,6 +32,12 @@ with st.sidebar:
     st.header("ポート数上限")
     k_max = st.slider("ポート数上限", 1, cfg["simulation"]["max_ports"], 3, key="ot2_k", label_visibility="collapsed",
                       help="住宅側ポートの数の上限。条件を満たす住宅が使わないポートは置きません。")
+    st.header("合計車両上限")
+    max_total = st.number_input("合計車両上限（台）", min_value=1, max_value=500, value=None, step=1, key="ot2_max",
+                                placeholder="上限なし", label_visibility="collapsed",
+                                help="使える車両の合計（3車種の合計）の上限。空欄なら上限なし。目標を満たす最小台数が"
+                                     "これを超えるときは、上限の台数での結果を表示します。")
+    st.caption("台（空欄＝上限なし）")
     st.header("需要発生条件")
     A = st.slider("① 住宅からポートまでの徒歩（分以内）", 0.5, 10.0, 3.0, 0.5, key="ot2_a", format="%.1f分",
                   help="出発地点（住宅）から住宅側ポートまで、この時間以内で歩ける住宅だけが利用します。")
@@ -57,7 +63,8 @@ with st.sidebar:
 st.title("① ポート最適配置")
 header_warnings(NET, FLAGS)
 
-params = dict(dests=dests, vehicles=vehicles, target=target, k_max=int(k_max), A=float(A), X=float(X))
+params = dict(dests=dests, vehicles=vehicles, target=target, k_max=int(k_max), A=float(A), X=float(X),
+              max_total=None if max_total is None else int(max_total))
 pkey = json.dumps([params, DATA_KEY, OC], ensure_ascii=False, default=str)
 
 
@@ -95,22 +102,31 @@ st.caption(f"検証期間：{'・'.join(f'{m}月' for m in OC['months'])}（平�
            f"対象の住宅 {R['n_hh']}/{R['n_houses']}戸。")
 ref = R.get("ref")
 if sel is None:
-    st.error(f"目標充足率{target:.0%}は達成できません。ポートの台数上限（{OC['port_cap']}台）までポートを埋めても、"
-             f"充足率は最大 {ms['充足率']:.1%} です。ポート数上限を増やすか、需要発生条件・目標充足率を見直してください。"
-             f"下の結果は、すべてのポートを上限まで埋めた {ref['合計']}台での参考値です。")
+    over = R.get("over")
+    if ref and ref.get("上限") and over:
+        st.error(f"目標充足率{target:.0%}を満たすには {over['合計']}台（自転車{over['自転車']}・キックボード{over['キックボード']}・"
+                 f"4輪{over.get('4輪', 0)}）が必要で、合計車両上限（{R['max_total']}台）を超えます。"
+                 f"下の結果は、上限の {ref['合計']}台での充足率です。")
+    elif ref and ref.get("上限"):
+        st.error(f"目標充足率{target:.0%}は達成できません（ポートの台数上限 {OC['port_cap']}台まで埋めても届きません）。"
+                 f"下の結果は、合計車両上限の {ref['合計']}台での充足率です。")
+    else:
+        st.error(f"目標充足率{target:.0%}は達成できません。ポートの台数上限（{OC['port_cap']}台）までポートを埋めても、"
+                 f"充足率は最大 {ms['充足率']:.1%} です。ポート数上限を増やすか、需要発生条件・目標充足率を見直してください。"
+                 f"下の結果は、すべてのポートを上限まで埋めた {ref['合計']}台での参考値です。")
     sel = ref
 c1, c2, c3, c4 = st.columns(4)
 c1.metric("ポート数", f"{L.k}", border=True,
           help="住宅側ポートの数（上限以内）。このほかに目的地側のポート（駅・イオン・公園・エニタイム）を使います。")
 c2.metric("駅ポート必要容量", f"{R['station_need']} 台", border=True,
           help="3か月の駅ポートの最大駐車台数（日ごとの最大の95%点）。駅ポートは上限なしで計算。")
-c3.metric("充足率", f"{ms['充足率']:.0%}" if not ref else f"最大 {ms['充足率']:.0%}", border=True,
+c3.metric("充足率", f"{ms['充足率']:.0%}" if not ref or ref.get("上限") else f"最大 {ms['充足率']:.0%}", border=True,
           help=f"{ms['充足率']:.1%}（目標 {target:.0%}以上、3か月）")
 c4.metric("平均短縮移動時間", f"{R['saving']:.1f} 分", border=True,
           help=f"徒歩だけ {ms['全員徒歩の平均(分/片道)']:.1f}分 → 平均 {ms['平均移動時間(分/片道)']:.1f}分（片道、利用できなかった人は徒歩）")
 with st.container(border=True):
     v1, v2, v3, v4 = st.columns(4)
-    v1.metric("合計車両台数", f"{sel['合計']} 台" + ("（参考）" if ref else ""))
+    v1.metric("合計車両台数", f"{sel['合計']} 台" + ("（上限）" if ref and ref.get("上限") else "（参考）" if ref else ""))
     v2.metric(om.TYPE_LABEL["ebike"], f"{sel['自転車']} 台")
     v3.metric(om.TYPE_LABEL["kickboard"], f"{sel['キックボード']} 台")
     v4.metric(om.TYPE_LABEL["trans"], f"{sel.get('4輪', 0)} 台")

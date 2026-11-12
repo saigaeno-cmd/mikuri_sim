@@ -249,17 +249,39 @@ def bound(L, ops, dem, specs, on, seed=0):
     return (1 - f_ / q_ if q_ else 1.0), F, (t_ / n_ if n_ else 0.0)
 
 
-def finish(net, cfg, oc, L, dem, cal, specs, kw, on, target, seed=0, search=True) -> dict:
-    """目標充足率を満たす最小台数（上限まで埋めても届かなければ達成不可と参考の結果）と、その3か月の評価。"""
+def _split(n, weights, on):
+    """合計 n 台を車種の重み（使わない車種は0）で整数に分ける。"""
+    w = np.array([max(float(x), 0.0) if o else 0.0 for x, o in zip(weights, on)])
+    if w.sum() <= 0:
+        w = np.array([1.0 if o else 0.0 for o in on])
+    raw = n * w / w.sum()
+    out = np.floor(raw).astype(int)
+    for i in np.argsort(-(raw - out))[: n - out.sum()]:
+        out[i] += 1
+    return [int(x) for x in out]
+
+
+def finish(net, cfg, oc, L, dem, cal, specs, kw, on, target, seed=0, search=True, max_total=None) -> dict:
+    """目標充足率を満たす最小台数（上限まで埋めても届かなければ達成不可と参考の結果）と、その3か月の評価。
+    max_total：合計車両台数の上限（None＝上限なし）。最小台数が上限を超えるときは、上限の台数での結果を参考に出す。"""
     ops = make_ops(cfg, weather="晴れ", **kw)
     t = round(1 - target, 4)
     best_possible, F_big, _ = bound(L, ops, dem, specs, on, seed)
-    r = None
+    r, over = None, None
     if best_possible >= target and search:
         r = min_fleet(L, ops, *dem["平日"], targets=(t,), n_rep=len(specs), seed=seed, day_specs=specs, types_on=on)[t]
-    out = dict(best_possible=best_possible, sel=r)
+        if r is not None and max_total is not None and r["合計"] > max_total:
+            over, r = r, None                   # 目標は満たせるが、車両上限を超える
+    out = dict(best_possible=best_possible, sel=r, over=over, max_total=max_total)
     if r is not None:
         F = fleet_for(L, r["自転車"], r["キックボード"], *dem["平日"], ops, n_tr=r.get("4輪", 0))
+    elif max_total is not None and (over is not None or int(F_big.init.sum()) > max_total):
+        # 車両上限の台数で配置（車種の比率は、目標を満たす最小台数の内訳、無ければ均等）
+        wts = [over["自転車"], over["キックボード"], over.get("4輪", 0)] if over else [1, 1, 1]
+        nb, nk, ntr = _split(int(max_total), wts, on)
+        F = fleet_for(L, nb, nk, *dem["平日"], ops, n_tr=ntr)
+        out["ref"] = {"自転車": int(F.init[:, 0].sum()), "キックボード": int(F.init[:, 1].sum()),
+                      "4輪": int(F.init[:, 2].sum()), "合計": int(F.init.sum()), "上限": True}
     else:                                       # 達成不可：すべてのポートを上限まで埋めた台数での結果（参考）
         F = F_big
         out["ref"] = {"自転車": int(F.init[:, 0].sum()), "キックボード": int(F.init[:, 1].sum()),
@@ -280,7 +302,7 @@ def finish(net, cfg, oc, L, dem, cal, specs, kw, on, target, seed=0, search=True
     return out
 
 
-def compute(net, cfg, survey, *, dests, vehicles, target, k_max, A, X, seed=0) -> dict:
+def compute(net, cfg, survey, *, dests, vehicles, target, k_max, A, X, max_total=None, seed=0) -> dict:
     """①の計算一式。戻り値は画面・シートで使う値の辞書。"""
     cfg, oc, purposes, on, kw = prepare(cfg, dests, vehicles)
     if not purposes:
@@ -314,7 +336,7 @@ def compute(net, cfg, survey, *, dests, vehicles, target, k_max, A, X, seed=0) -
     if L is None:
         return {"error": "条件を満たす利用がありません。条件をゆるめてください。", "n_cover": 0}
     cal, specs, src = period(cfg, oc, dem, kw, seed)
-    out = finish(net, cfg, oc, L, dem, cal, specs, kw, on, target, seed)
+    out = finish(net, cfg, oc, L, dem, cal, specs, kw, on, target, seed, max_total=max_total)
     out.update(L=L, S=S, cands=cands, assign=house_port, assign_hd=assign_hd, hd=hd, q=q, purposes=purposes,
                dests=dests, vehicles=vehicles, n_cover=n_cover, cal=cal, source=src, target=target, A=A, X=X,
                k_max=k_max, n_houses=len(net.houses), n_hh=int((house_port >= 0).sum()), cfg=cfg)
