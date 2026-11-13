@@ -66,7 +66,8 @@ class _SeqEval:
 
 
 def min_fleet(L: Layout, ops: Ops, out_h, ret_h, targets=(0.05, 0.01, 0.20), n_rep=60, seed=0,
-              max_each: int | None = None, day_specs=None, max_tr: int | None = None, types_on=None) -> dict:
+              max_each: int | None = None, day_specs=None, max_tr: int | None = None, types_on=None,
+              max_by_type=None) -> dict:
     """自転車×キックボード（×4輪）の台数の組み合わせのうち、貸出失敗率 ≤ 目標 を満たす最小の合計台数。
     失敗率は各車種の台数に対して減少するとみなし、4輪の台数ごとに、自転車台数ごとに必要なキックボード台数の下限を
     階段状にたどる（総当たりと同じ答えを、少ない評価回数で求める）。同じ乱数列で比べ、
@@ -86,6 +87,11 @@ def min_fleet(L: Layout, ops: Ops, out_h, ret_h, targets=(0.05, 0.01, 0.20), n_r
         max_tr = 0
     max_nb = max_each if on[EB] else 0
     max_nk = max_each if on[KB] else 0
+    if max_by_type is not None:                     # 車種ごとの上限台数（None＝上限なし）
+        mb = list(max_by_type) + [None] * 3
+        max_nb = max_nb if mb[0] is None else min(max_nb, int(mb[0]))
+        max_nk = max_nk if mb[1] is None else min(max_nk, int(mb[1]))
+        max_tr = max_tr if mb[2] is None else min(max_tr, int(mb[2]))
     ev = _SeqEval(L, ops, out_h, ret_h, n_rep, seed, day_specs=day_specs)
     mix = np.array(ops.mix[:3] if ops.nt >= 3 else list(ops.mix) + [0.0])
 

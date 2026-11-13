@@ -261,25 +261,27 @@ def _split(n, weights, on):
     return [int(x) for x in out]
 
 
-def finish(net, cfg, oc, L, dem, cal, specs, kw, on, target, seed=0, search=True, max_total=None) -> dict:
+def finish(net, cfg, oc, L, dem, cal, specs, kw, on, target, seed=0, search=True, max_by_type=None) -> dict:
     """目標充足率を満たす最小台数（上限まで埋めても届かなければ達成不可と参考の結果）と、その3か月の評価。
-    max_total：合計車両台数の上限（None＝上限なし）。最小台数が上限を超えるときは、上限の台数での結果を参考に出す。"""
+    max_by_type：車種ごとの上限台数 (自転車, キックボード, 4輪)（None＝上限なし）。上限の範囲で目標を満たせないときは、
+    上限の台数（上限の無い車種は、ポートを上限まで埋めたときの台数）での結果を参考に出す。"""
+    caps_t = list(max_by_type or [None, None, None])
+    has_cap = any(c is not None for c, o in zip(caps_t, on) if o)
     ops = make_ops(cfg, weather="晴れ", **kw)
     t = round(1 - target, 4)
     best_possible, F_big, _ = bound(L, ops, dem, specs, on, seed)
     r, over = None, None
     if best_possible >= target and search:
-        r = min_fleet(L, ops, *dem["平日"], targets=(t,), n_rep=len(specs), seed=seed, day_specs=specs, types_on=on)[t]
-        if r is not None and max_total is not None and r["合計"] > max_total:
-            over, r = r, None                   # 目標は満たせるが、車両上限を超える
-    out = dict(best_possible=best_possible, sel=r, over=over, max_total=max_total)
+        r = min_fleet(L, ops, *dem["平日"], targets=(t,), n_rep=len(specs), seed=seed, day_specs=specs, types_on=on,
+                      max_by_type=caps_t if has_cap else None)[t]
+    out = dict(best_possible=best_possible, sel=r, over=over, max_by_type=caps_t if has_cap else None)
     if r is not None:
         F = fleet_for(L, r["自転車"], r["キックボード"], *dem["平日"], ops, n_tr=r.get("4輪", 0))
-    elif max_total is not None and (over is not None or int(F_big.init.sum()) > max_total):
-        # 車両上限の台数で配置（車種の比率は、目標を満たす最小台数の内訳、無ければ均等）
-        wts = [over["自転車"], over["キックボード"], over.get("4輪", 0)] if over else [1, 1, 1]
-        nb, nk, ntr = _split(int(max_total), wts, on)
-        F = fleet_for(L, nb, nk, *dem["平日"], ops, n_tr=ntr)
+    elif has_cap:
+        # 車種ごとの上限の台数で配置（上限の無い車種は、ポートを上限まで埋めたときの台数）
+        big = [int(F_big.init[:, i].sum()) for i in range(3)]
+        n3 = [(0 if not o else big[i] if c is None else int(c)) for i, (c, o) in enumerate(zip(caps_t, on))]
+        F = fleet_for(L, n3[0], n3[1], *dem["平日"], ops, n_tr=n3[2])
         out["ref"] = {"自転車": int(F.init[:, 0].sum()), "キックボード": int(F.init[:, 1].sum()),
                       "4輪": int(F.init[:, 2].sum()), "合計": int(F.init.sum()), "上限": True}
     else:                                       # 達成不可：すべてのポートを上限まで埋めた台数での結果（参考）
@@ -302,7 +304,7 @@ def finish(net, cfg, oc, L, dem, cal, specs, kw, on, target, seed=0, search=True
     return out
 
 
-def compute(net, cfg, survey, *, dests, vehicles, target, k_max, A, X, max_total=None, seed=0) -> dict:
+def compute(net, cfg, survey, *, dests, vehicles, target, k_max, A, X, max_by_type=None, seed=0) -> dict:
     """①の計算一式。戻り値は画面・シートで使う値の辞書。"""
     cfg, oc, purposes, on, kw = prepare(cfg, dests, vehicles)
     if not purposes:
@@ -336,7 +338,7 @@ def compute(net, cfg, survey, *, dests, vehicles, target, k_max, A, X, max_total
     if L is None:
         return {"error": "条件を満たす利用がありません。条件をゆるめてください。", "n_cover": 0}
     cal, specs, src = period(cfg, oc, dem, kw, seed)
-    out = finish(net, cfg, oc, L, dem, cal, specs, kw, on, target, seed, max_total=max_total)
+    out = finish(net, cfg, oc, L, dem, cal, specs, kw, on, target, seed, max_by_type=max_by_type)
     out.update(L=L, S=S, cands=cands, assign=house_port, assign_hd=assign_hd, hd=hd, q=q, purposes=purposes,
                dests=dests, vehicles=vehicles, n_cover=n_cover, cal=cal, source=src, target=target, A=A, X=X,
                k_max=k_max, n_houses=len(net.houses), n_hh=int((house_port >= 0).sum()), cfg=cfg)

@@ -32,12 +32,15 @@ with st.sidebar:
     st.header("ポート数上限")
     k_max = st.slider("ポート数上限", 1, cfg["simulation"]["max_ports"], 3, key="ot2_k", label_visibility="collapsed",
                       help="住宅側ポートの数の上限。条件を満たす住宅が使わないポートは置きません。")
-    st.header("合計車両上限")
-    max_total = st.number_input("合計車両上限（台）", min_value=1, max_value=500, value=None, step=1, key="ot2_max",
-                                placeholder="上限なし", label_visibility="collapsed",
-                                help="使える車両の合計（3車種の合計）の上限。空欄なら上限なし。目標を満たす最小台数が"
-                                     "これを超えるときは、上限の台数での結果を表示します。")
-    st.caption("台（空欄＝上限なし）")
+    st.header("車両上限")
+    max_by = []
+    for t in TYPES:
+        v = st.number_input(f"{om.TYPE_LABEL[t]}（台）", min_value=0, max_value=300, value=None, step=1,
+                            key=f"ot2_max_{t}", placeholder="上限なし",
+                            disabled=t not in vehicles,
+                            help=f"{om.TYPE_LABEL[t]}の上限台数。空欄なら上限なし。")
+        max_by.append(None if (v is None or t not in vehicles) else int(v))
+    st.caption("空欄＝上限なし。上限の範囲で目標充足率を満たす最小台数を探します。")
     st.header("需要発生条件")
     A = st.slider("① 住宅からポートまでの徒歩（分以内）", 0.5, 10.0, 3.0, 0.5, key="ot2_a", format="%.1f分",
                   help="出発地点（住宅）から住宅側ポートまで、この時間以内で歩ける住宅だけが利用します。")
@@ -64,7 +67,7 @@ st.title("① ポート最適配置")
 header_warnings(NET, FLAGS)
 
 params = dict(dests=dests, vehicles=vehicles, target=target, k_max=int(k_max), A=float(A), X=float(X),
-              max_total=None if max_total is None else int(max_total))
+              max_by_type=max_by if any(x is not None for x in max_by) else None)
 pkey = json.dumps([params, DATA_KEY, OC], ensure_ascii=False, default=str)
 
 
@@ -102,14 +105,10 @@ st.caption(f"検証期間：{'・'.join(f'{m}月' for m in OC['months'])}（平�
            f"対象の住宅 {R['n_hh']}/{R['n_houses']}戸。")
 ref = R.get("ref")
 if sel is None:
-    over = R.get("over")
-    if ref and ref.get("上限") and over:
-        st.error(f"目標充足率{target:.0%}を満たすには {over['合計']}台（自転車{over['自転車']}・キックボード{over['キックボード']}・"
-                 f"4輪{over.get('4輪', 0)}）が必要で、合計車両上限（{R['max_total']}台）を超えます。"
-                 f"下の結果は、上限の {ref['合計']}台での充足率です。")
-    elif ref and ref.get("上限"):
-        st.error(f"目標充足率{target:.0%}は達成できません（ポートの台数上限 {OC['port_cap']}台まで埋めても届きません）。"
-                 f"下の結果は、合計車両上限の {ref['合計']}台での充足率です。")
+    if ref and ref.get("上限"):
+        lim = "・".join(f"{om.TYPE_LABEL[t]}{c}台" for t, c in zip(TYPES, R["max_by_type"]) if c is not None)
+        st.error(f"車両上限（{lim}）の範囲では、目標充足率{target:.0%}を満たせません。"
+                 f"下の結果は、上限の台数（上限の無い車種はポートを上限まで埋めた台数）の {ref['合計']}台での充足率です。")
     else:
         st.error(f"目標充足率{target:.0%}は達成できません。ポートの台数上限（{OC['port_cap']}台）までポートを埋めても、"
                  f"充足率は最大 {ms['充足率']:.1%} です。ポート数上限を増やすか、需要発生条件・目標充足率を見直してください。"
