@@ -169,7 +169,8 @@ def main():
         if R and "L" in R:
             curves[lab] = om.fleet_curve(R, spec.get("curve_sizes", [10, 20, 30, 40, 50, 60]))
     if curves:
-        slides.append(thesis.curve_slide(curves, tgt, sub="基本ケース（S1）と高位（A2）で選ばれた配置のまま、台数だけを変えた（1回目の乱数）"))
+        slides.append(thesis.curve_slide(curves, tgt, sub="基本ケース（S1）と高位（A2）で選ばれた配置のまま、台数だけを変えた（1回目の乱数）。"
+                                         "右端は、住宅側・駅・目的地のポートの区画がすべて埋まる台数"))
     bids = [c for c in cases if c["group"].startswith("B") or c["id"] == "S1"]
     if len(bids) > 2:
         bd = []
@@ -178,8 +179,9 @@ def main():
             if len(g):
                 p = thesis.case_params(base, c)
                 ok = g["達成"].astype(bool)
-                bd.append({"ポート数上限": int(p["k_max"]), "達成": bool(ok.all()),
-                           "合計台数": float(np.median(g.loc[ok if ok.all() else g.index, "合計台数"])),
+                hit = bool(ok.mean() >= 0.5)            # 半数以上の回で目標を達成
+                bd.append({"ポート数上限": int(p["k_max"]), "達成": hit, "達成回": f"{int(ok.sum())}/{len(g)}",
+                           "合計台数": float(np.median(g.loc[ok if hit else g.index, "合計台数"])),
                            "最大充足率": float(np.median(g["最大充足率"]))})
         bd = pd.DataFrame(bd).sort_values("ポート数上限")
         slides.append(thesis.ports_slide(bd, tgt, sub=f"転換率{base['conversion']:.0%}・住宅側ポート容量{base['port_cap']}台。各{a.reps}回の中央値"))

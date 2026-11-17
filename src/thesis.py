@@ -249,9 +249,10 @@ def ports_slide(df: pd.DataFrame, target: float, sub=""):
     fig = _slide("ポート数と充足率・台数", sub)
     ax = fig.add_axes([0.07, 0.1, 0.62, 0.72])
     ax.bar(df["ポート数上限"], df["合計台数"], color=["#C9D3EA" if not a else "#7C93C8" for a in df["達成"]], width=0.6,
-           label="台数（濃い色＝目標達成の最小台数、薄い色＝容量まで埋めた参考）")
+           label="台数（濃い色＝目標達成（半数以上の回）の最小台数、薄い色＝容量まで埋めた参考）")
     ax.set_xlabel("ポート数上限（か所）", fontsize=12, color=MUTED)
     ax.set_ylabel("台数", fontsize=12, color=MUTED)
+    ax.set_ylim(0, float(df["合計台数"].max()) * 1.35)
     ax.spines[["top"]].set_visible(False)
     a2 = ax.twinx()
     a2.plot(df["ポート数上限"], df["最大充足率"], color=ORANGE, marker="o", lw=3, ms=8, label="最大充足率（容量まで埋めたとき）")
@@ -265,8 +266,11 @@ def ports_slide(df: pd.DataFrame, target: float, sub=""):
     tx = fig.add_axes([0.73, 0.1, 0.24, 0.72])
     tx.axis("off")
     hit = df[df["達成"]]
-    msg = (f"目標{target:.0%}を満たす最少のポート数：{int(hit['ポート数上限'].iloc[0])}か所（{int(hit['合計台数'].iloc[0])}台）"
-           if len(hit) else f"ポート{int(df['ポート数上限'].max())}か所までは目標{target:.0%}に届かない")
+    msg = (f"目標{target:.0%}を満たす最少のポート数：\n{int(hit['ポート数上限'].iloc[0])}か所（{int(hit['合計台数'].iloc[0])}台、"
+           f"{hit['達成回'].iloc[0]}回で達成）" if len(hit) else f"ポート{int(df['ポート数上限'].max())}か所までは目標{target:.0%}に届かない")
+    for x, y, r in zip(df["ポート数上限"], df["合計台数"], df.get("達成回", [""] * len(df))):
+        ax.annotate(f"{y:.0f}台\n({r}回達成)" if r else f"{y:.0f}台", (x, y), xytext=(0, 4), textcoords="offset points",
+                    ha="center", fontsize=10, color=INK)
     tx.text(0, 1, "読み取り方\n\n" + msg + "\n\nポートを増やすと住宅から近くなり、\n容量（区画）の合計も増える。",
             fontsize=12.5, color=INK, va="top", linespacing=1.7)
     return fig
