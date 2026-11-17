@@ -363,10 +363,13 @@ def evaluate_candidates(net, cfg, survey, cands: pd.DataFrame, *, dests, vehicle
     trips = float(oc["trips"]) * conversion
     n = len(cands)
     m = min(int(k_max), n)
-    combos = [c for r in range(1, m + 1) for c in itertools.combinations(range(n), r)]
-    method = f"{len(combos)}通りを比較"
-    if len(combos) > max_combos:                     # 多いときは1か所ずつ最良を足す
-        combos, method = None, f"組み合わせが多いため、1か所ずつ最良を足す方法で探索"
+    import math
+    total = sum(math.comb(n, r) for r in range(1, m + 1))      # 先に数える（列挙すると膨大になる）
+    if total > max_combos:                           # 多いときは1か所ずつ最良を足す
+        combos, method = None, f"組み合わせが{total:,}通りと多いため、1か所ずつ最良を足す方法で探索"
+    else:
+        combos = [c for r in range(1, m + 1) for c in itertools.combinations(range(n), r)]
+        method = f"{len(combos)}通りを比較"
     ops = make_ops(cfg, weather="晴れ", **kw)
     cache = {}
 
