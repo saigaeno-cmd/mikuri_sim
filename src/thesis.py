@@ -169,12 +169,12 @@ def case_sheet(R: dict, cfg, title: str, cond: str, stats: dict | None, roads=No
     tl = (f"移動時間（片道）：平均 {ms['平均移動時間(分/片道)']:.1f}分・最大 {ms.get('最大移動時間(分)', np.nan):.1f}分・"
           f"最小 {ms.get('最小移動時間(分)', np.nan):.1f}分（徒歩だけ 平均 {ms['全員徒歩の平均(分/片道)']:.1f}分）　／　"
           f"短縮時間：平均 {R['saving']:.1f}分・最大 {ms.get('最大短縮(分)', np.nan):.1f}分・最小 {ms.get('最小短縮(分)', np.nan):.1f}分")
-    fig.text(0.97, 0.548, tl, fontsize=10.5, color=INK, va="center", ha="right",
+    fig.text(0.03, 0.54, tl, fontsize=10.5, color=INK, va="center", ha="left",
              bbox=dict(boxstyle="round,pad=0.35", fc="#F3F5F8", ec="none"))
-    fig.text(0.03, 0.535, "ポート場所", fontsize=15, weight="bold", color=INK, va="center")
-    _map(fig.add_axes([0.03, 0.03, 0.55, 0.49]), R, cfg, roads)
-    fig.text(0.61, 0.535, "時間帯別の利用希望と充足", fontsize=12, weight="bold", color=INK, va="center")
-    _hourly(fig.add_axes([0.645, 0.32, 0.33, 0.19]), ms["_hourly"])
+    fig.text(0.03, 0.5, "ポート場所", fontsize=15, weight="bold", color=INK, va="center")
+    _map(fig.add_axes([0.03, 0.03, 0.55, 0.455]), R, cfg, roads)
+    fig.text(0.61, 0.5, "時間帯別の利用希望と充足", fontsize=12, weight="bold", color=INK, va="center")
+    _hourly(fig.add_axes([0.645, 0.325, 0.33, 0.15]), ms["_hourly"])
     fig.text(0.61, 0.265, "ポートごと（台数は初期配置）", fontsize=12, weight="bold", color=INK, va="center")
     peaks = ms["ポート別最大駐車(95%点)"]
     init = R["init"]
