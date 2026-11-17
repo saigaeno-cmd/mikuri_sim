@@ -1,0 +1,32 @@
+# 修士論文用の比較ケース。python scripts/run_thesis_cases.py で data/output/thesis/ に1ケース1ページと PPT を作る。
+# 基本ケースから1つずつ条件を変える。書かない項目は base の値。
+# model: eval＝②（候補地から選ぶ・転換率型）／time＝①（時間短縮型）
+base:
+  model: eval
+  conversion: 0.12              # 需要：低位（暫定）12%
+  k_max: 3                      # ポート数上限
+  target: 0.80                  # 目標充足率
+  vehicles: [ebike, kickboard, trans]
+  dests: [station, aeon, park, anytime]
+  port_cap: 5                   # 住宅側ポート（候補地）の容量
+  dest_caps: {station: 25, aeon: 5, park: 5, anytime: 5}
+  A: 3.0                        # ①の需要発生条件：ポートまでの徒歩（分以内）
+  X: 4.0                        # ①の需要発生条件：短くなる時間（分以上）
+cases:
+  - {id: S1, group: 基本, name: 基本（低位12%・3か所・3車種）}
+  - {id: A2, group: A 需要の量, name: 高位24%, conversion: 0.24}
+  - {id: B1, group: B ポート数, name: ポート1か所, k_max: 1}
+  - {id: B2, group: B ポート数, name: ポート2か所, k_max: 2}
+  - {id: B4, group: B ポート数, name: ポート4か所, k_max: 4}
+  - {id: B5, group: B ポート数, name: ポート5か所, k_max: 5}
+  - {id: B6, group: B ポート数, name: ポート6か所, k_max: 6}
+  - {id: B8, group: B ポート数, name: ポート8か所, k_max: 8}
+  - {id: C2, group: C 車種構成, name: 2車種（4輪なし）, vehicles: [ebike, kickboard]}
+  - {id: D2, group: D 容量, name: ポート容量10台, port_cap: 10, dest_caps: {station: 25, aeon: 10, park: 10, anytime: 10}}
+  - {id: D3, group: D 容量, name: 駅ポート上限なし, dest_caps: {station: 999, aeon: 5, park: 5, anytime: 5}}
+  - {id: E1, group: E 需要の考え方, name: ①時間短縮型（徒歩3分・4分短縮）, model: time}
+  - {id: E2, group: E 需要の考え方, name: ①時間短縮型（徒歩1分・2分短縮）, model: time, A: 1.0, X: 2.0}
+heatmap:                        # F：①の需要発生条件ごとの対象住宅数（ポート3か所）
+  A: [1.0, 2.0, 3.0, 4.0, 5.0]
+  X: [0.0, 1.0, 2.0, 3.0, 4.0, 5.0]
+curve_sizes: [10, 15, 20, 25, 30, 35, 40, 45, 50, 60, 70, 80]   # 台数と充足率の曲線（S1・A2の配置で）

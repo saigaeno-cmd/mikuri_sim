@@ -5,3 +5,4 @@ __pycache__/
 *.tmp
 data/output/study/_map.png
 data/output/sheets/.cache_*.pkl
+data/output/thesis/.cache/

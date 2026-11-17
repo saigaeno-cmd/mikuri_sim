@@ -15,6 +15,16 @@ Windows は `start_windows.bat`、Mac/Linux は `start_mac_linux.sh` でも起�
 最初の1回だけ Git（https://git-scm.com/download/win）を入れ、`git clone https://github.com/saigaeno-cmd/mikuri_sim.git` で取得する。
 以後は `更新.bat` をダブルクリックすると最新版になる（続けて起動もできる）。
 
+### 修士論文用の比較（1ケース1ページ＋比較の表・曲線の PPT）
+```
+python scripts/run_thesis_cases.py                # data/conditions/thesis_cases.yaml の全ケース × 5回
+python scripts/run_thesis_cases.py --reps 10      # 回数を増やす（時間は回数に比例）
+python scripts/run_thesis_cases.py --render-only  # 計算済みの結果から図だけ作り直す
+```
+基本ケース（②転換率12%・ポート3か所・3車種・目標80%）から1つずつ条件を変える：A 需要の量（12%↔24%）、B ポート数（1〜8か所）、
+C 車種構成（4輪なし）、D 容量（ポート10台・駅ポート上限なし）、E 需要の考え方（①時間短縮型）、F 需要発生条件のヒートマップ。
+出力は `data/output/thesis/`（`修士論文_比較.pptx`・`.pdf`、`slides/*.png`、`比較.csv`、`全回.csv`、`ヒートマップ.csv`）。
+
 ### 一括更新（全条件の計算 → 感度分析 → 追加検証 → 報告資料）
 ```bash
 python scripts/run_all.py                     # すべて（4コアで1時間前後）

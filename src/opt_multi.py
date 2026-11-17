@@ -339,7 +339,7 @@ def compute(net, cfg, survey, *, dests, vehicles, target, k_max, A, X, max_by_ty
         return {"error": "条件を満たす利用がありません。条件をゆるめてください。", "n_cover": 0}
     cal, specs, src = period(cfg, oc, dem, kw, seed)
     out = finish(net, cfg, oc, L, dem, cal, specs, kw, on, target, seed, max_by_type=max_by_type)
-    out.update(L=L, S=S, cands=cands, assign=house_port, assign_hd=assign_hd, hd=hd, q=q, purposes=purposes,
+    out.update(dem=dem, specs=specs, kw=kw, on=on, L=L, S=S, cands=cands, assign=house_port, assign_hd=assign_hd, hd=hd, q=q, purposes=purposes,
                dests=dests, vehicles=vehicles, n_cover=n_cover, cal=cal, source=src, target=target, A=A, X=X,
                k_max=k_max, n_houses=len(net.houses), n_hh=int((house_port >= 0).sum()), cfg=cfg)
     return out
@@ -412,7 +412,7 @@ def evaluate_candidates(net, cfg, survey, cands: pd.DataFrame, *, dests, vehicle
                            "充足率（容量まで埋めたとき）": r[1], "平均移動時間(分/片道)": r[2]} for r in rows])
     table = table.sort_values(["充足率（容量まで埋めたとき）", "ポート数", "平均移動時間(分/片道)"],
                               ascending=[False, True, True]).reset_index(drop=True)
-    out.update(L=L, S=S, cands=cs, assign=hp, assign_hd=ahd, hd=hd, purposes=purposes, dests=dests, vehicles=vehicles,
+    out.update(dem=dem, specs=specs, kw=kw, on=on, L=L, S=S, cands=cs, assign=hp, assign_hd=ahd, hd=hd, purposes=purposes, dests=dests, vehicles=vehicles,
                n_cover=nc, cal=cal, source=src, target=target, k_max=k_max, conversion=conversion,
                n_houses=len(net.houses), n_hh=int((hp >= 0).sum()), cfg=cfg, method=method, table=table,
                chosen=[str(cands["name"].iloc[j]) for j in S])
@@ -421,3 +421,21 @@ def evaluate_candidates(net, cfg, survey, cands: pd.DataFrame, *, dests, vehicle
 
 __all__ = ["DEST_ALL", "DEST_LABEL", "TYPE_LABEL", "active_purposes", "compute", "evaluate_candidates",
            "month_calendar"]
+
+
+def fleet_curve(R, sizes, seed=0) -> pd.DataFrame:
+    """結果 R の配置で、合計台数を変えたときの充足率（3か月）。車種の比率は R の台数の内訳（無ければ均等）。"""
+    cfg, L, dem, kw, on = R["cfg"], R["L"], R["dem"], R["kw"], R["on"]
+    ops = make_ops(cfg, weather="晴れ", **kw)
+    base = R.get("sel") or R.get("ref") or {}
+    wts = [base.get("自転車", 1), base.get("キックボード", 1), base.get("4輪", 1)]
+    rows = []
+    for n in sizes:
+        nb, nk, ntr = _split(int(n), wts, on)
+        F = fleet_for(L, nb, nk, *dem["平日"], ops, n_tr=ntr)
+        f_, q_ = 0, 0
+        for i, spec in enumerate(R["specs"]):
+            d_, _ = simulate_day(L, F, *spec, np.random.default_rng([seed, i]))
+            f_, q_ = f_ + d_.fail_out + d_.fail_ret, q_ + d_.req_out + d_.req_ret
+        rows.append({"合計台数": int(F.init.sum()), "充足率": 1 - f_ / q_ if q_ else 1.0})
+    return pd.DataFrame(rows)
