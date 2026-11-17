@@ -132,6 +132,12 @@ def main():
             "上限の目安": thesis._fmt_range(g["最大充足率"].tolist(), pct=True),
             "駅必要容量": thesis._fmt_range(g["駅ポート必要容量"].tolist()),
             "平均短縮(分)": thesis._fmt_range(g["平均短縮移動時間"].tolist(), fmt="{:.1f}"),
+            "最大短縮(分)": thesis._fmt_range(g["最大短縮時間"].tolist(), fmt="{:.1f}"),
+            "最小短縮(分)": thesis._fmt_range(g["最小短縮時間"].tolist(), fmt="{:.1f}"),
+            "平均移動(分)": thesis._fmt_range(g["平均移動時間"].tolist(), fmt="{:.1f}"),
+            "最大移動(分)": thesis._fmt_range(g["最大移動時間"].tolist(), fmt="{:.1f}"),
+            "最小移動(分)": thesis._fmt_range(g["最小移動時間"].tolist(), fmt="{:.1f}"),
+            "徒歩だけ平均(分)": thesis._fmt_range(g["徒歩だけの平均"].tolist(), fmt="{:.1f}"),
             "年間費用(万円)": thesis._fmt_range(g["年間総費用(万円)"].tolist()),
             "1回あたり(円)": thesis._fmt_range(g["1回あたり費用(円)"].tolist()),
         })
@@ -151,18 +157,27 @@ def main():
         ("期間・天気", f"{'・'.join(f'{m}月' for m in oc['months'])}の3か月（平日・休日・天気は平年値から抽選）"),
         ("基本ケース", f"転換率{base['conversion']:.0%}・ポート上限{base['k_max']}か所（候補地{len(net.candidates)}か所から選ぶ）・"
                     f"住宅側ポート容量{base['port_cap']}台・駅ポート{base['dest_caps']['station']}台・目標充足率{tgt:.0%}・3車種"),
+        ("利用しない条件", f"進行方向と反対方向のポートへ{cfg['behavior'].get('backtrack_limit_min')}分以上歩く場合は利用しない"
+                       "（住宅から見てポートの方向と目的地の方向のなす角が90度を超える）"),
         ("繰り返し", f"各ケース {a.reps}回（乱数を変える）。表は中央値（最小–最大）"),
     ], columns=["項目", "条件"])
     slides.append(thesis.table_slide("シミュレーションの条件（固定）", fixed, col_w=[0.16, 0.84], fs=12.5))
     vary = pd.DataFrame([(c["group"], c["id"], c["name"]) for c in cases], columns=["比較", "ID", "変える条件（基本ケースから1つだけ）"])
     slides.append(thesis.table_slide("比べるケース", vary, col_w=[0.2, 0.1, 0.7], fs=12.5))
     if len(comp):
-        show = comp.drop(columns=["比較"])
-        w = [0.04, 0.17, 0.11, 0.05, 0.1, 0.08, 0.07, 0.07, 0.07, 0.07, 0.08, 0.09]
-        slides.append(thesis.table_slide("比較の表", show, sub=f"各ケース{a.reps}回の中央値（最小–最大）。"
+        tcols = ["平均短縮(分)", "最大短縮(分)", "最小短縮(分)", "平均移動(分)", "最大移動(分)", "最小移動(分)", "徒歩だけ平均(分)"]
+        show = comp.drop(columns=["比較"] + tcols)
+        w = [0.04, 0.19, 0.12, 0.06, 0.1, 0.09, 0.09, 0.09, 0.08, 0.1, 0.1]
+        slides.append(thesis.table_slide("比較の表（台数・充足率・費用）", show, sub=f"各ケース{a.reps}回の中央値（最小–最大）。"
                                          f"台数＝目標充足率{tgt:.0%}を満たす最小台数（達成不可は容量まで埋めた参考の内訳）。"
                                          "上限の目安＝すべてのポートを容量まで埋めたときの充足率",
                                          col_w=w, fs=9, highlight=lambda i: show["ID"].iloc[i] == "S1"))
+        show2 = comp[["ID", "ケース", "需要"] + tcols]
+        w2 = [0.04, 0.2, 0.13] + [0.09] * 7
+        slides.append(thesis.table_slide("比較の表（移動時間・片道）", show2, sub=f"各ケース{a.reps}回の中央値（最小–最大）。"
+                                         "短縮＝徒歩だけの時間 − 実際の時間（利用できなかった人は徒歩、マイナス＝徒歩より遅い）。"
+                                         "最大・最小は3か月の全片道のうちの最大・最小",
+                                         col_w=w2, fs=9, highlight=lambda i: show2["ID"].iloc[i] == "S1"))
     curves = {}
     for cid, lab in (("S1", "低位12%"), ("A2", "高位24%")):
         R = res.get((cid, 0))

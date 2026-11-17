@@ -21,6 +21,7 @@ from .demand import DESTS, table_hourly
 from .engine import TYPES, Flow, Layout, allocate_fleet, month_calendar, peak_outflow, simulate_day
 from .location import kmh_to_m_per_min
 from .plan import fleet_for, make_ops, route_kmh, type_speed
+from .geo import backtrack_limit, backtrack_mask, dest_point
 from .purposes import walk_to
 from .study import annual_cost, min_fleet, month_eval
 from .weather_data import month_specs
@@ -100,6 +101,10 @@ def time_tensors(net, cfg, dests, purposes, proc_min, cands=None):
                 + float(dsp["snap_m"].iloc[j]))
         vr = kmh_to_m_per_min(_house_speed(cfg, d, p["allowed"]))
         mob[:, :, i] = (Wc / vw) + proc_min + (ride / vr)[None, :] + egress[j] / vw
+        dl = dest_point(cfg, d)                      # 反対方向のポートへ設定の分数以上歩く組は使わない
+        bad = backtrack_mask(net.houses["lat"], net.houses["lon"], cands["lat"], cands["lon"], dl[0], dl[1],
+                             Wc / vw, backtrack_limit(cfg))
+        mob[:, :, i] = np.where(bad, np.inf, mob[:, :, i])
     return wo, mob, cands, dsp, egress, hd, Wc
 
 
@@ -247,6 +252,7 @@ def bound(L, ops, dem, specs, on, seed=0):
         d_, _ = simulate_day(L, F, *spec, np.random.default_rng([seed, i]))
         f_, q_ = f_ + d_.fail_out + d_.fail_ret, q_ + d_.req_out + d_.req_ret
         t_, w_, n_ = t_ + d_.time_min, w_ + d_.walk_only_min, n_ + d_.legs
+    bound.served = (q_ - f_) / max(len(specs), 1)      # 1日あたりの利用（容量まで埋めたとき）
     return (1 - f_ / q_ if q_ else 1.0), F, (t_ / n_ if n_ else 0.0)
 
 
@@ -350,7 +356,9 @@ def evaluate_candidates(net, cfg, survey, cands: pd.DataFrame, *, dests, vehicle
                         dest_caps: dict, max_combos: int = 300, seed=0, progress=None) -> dict:
     """②：候補地（name, lat, lon, cap）から上限 k_max か所以内の組み合わせを選び、最小台数を求める。
     需要：住宅すべてが目的地ごとに1日1往復 × 転換率（期待値）。住宅は所要時間が最短のポートを使う。
-    組み合わせは「すべてのポートを容量まで埋めたときの充足率」が最大のもの（同じならポートが少なく、移動時間が短い方）。"""
+    組み合わせは「すべてのポートを容量まで埋めたときの1日の利用回数」が最大のもの（同じなら充足率が高く、
+    ポートが少なく、移動時間が短い方）。反対方向の判定で使わない住宅が出るため、充足率だけで選ぶと
+    利用者の少ない組み合わせが選ばれてしまうことを避ける。"""
     import itertools
     cfg, oc, purposes, on, kw = prepare(cfg, dests, vehicles)
     if not purposes:
@@ -379,47 +387,56 @@ def evaluate_candidates(net, cfg, survey, cands: pd.DataFrame, *, dests, vehicle
         if idx in cache and not keep:
             return cache[idx]
         S = list(idx)
-        ahd = mob[:, S, :].argmin(1) if hd else np.zeros((len(net.houses), 0), int)
+        sub = mob[:, S, :]
+        ahd = (np.where(np.isfinite(sub).any(1), sub.argmin(1), -1) if hd    # 使えるポートが無い住宅は使わない
+               else np.zeros((len(net.houses), 0), int))
         L, dem, hp, nc = build(net, cfg, survey, dests=dests, purposes=purposes, hd=hd,
                                cnode=cs["node"].to_numpy()[S], csnap=cs["snap_m"].to_numpy()[S], W=Wc[:, S],
                                assign_hd=ahd, weight_hd=np.full(ahd.shape, trips), house_caps=caps_all[S],
                                dest_caps=dest_caps)
         if L is None:
-            cache[idx] = (-1.0, 0.0, None)
+            cache[idx] = (-1.0, 0.0, None, 0.0)
             return cache[idx]
         cal, specs, src = period(cfg, oc, dem, kw, seed)
         if idx in cache:
-            bp, tt = cache[idx][:2]
+            bp, tt, _, sv = cache[idx]
         else:
             bp, _, tt = bound(L, ops, dem, specs, on, seed)
-        cache[idx] = (bp, tt, None)
-        return (bp, tt, (L, dem, hp, nc, cal, specs, src, S, ahd)) if keep else cache[idx]
+            sv = bound.served
+        cache[idx] = (bp, tt, None, sv)
+        return (bp, tt, (L, dem, hp, nc, cal, specs, src, S, ahd), sv) if keep else cache[idx]
 
     rows = []
     if combos is not None:
         for i, c in enumerate(combos):
-            bp, tt, _ = score(c)
-            rows.append((c, bp, tt))
+            bp, tt, _, sv = score(c)
+            rows.append((c, bp, tt, sv))
             if progress:
                 progress((i + 1) / len(combos))
     else:
         chosen = []
         for step in range(m):
-            cand_rows = [(tuple(chosen + [j]),) + score(chosen + [j])[:2] for j in range(n) if j not in chosen]
-            best = max(cand_rows, key=lambda r: (r[1], -r[2]))
-            if chosen and best[1] <= max(r[1] for r in rows) + 1e-9:
+            cand_rows = []
+            for j in range(n):
+                if j not in chosen:
+                    bp, tt, _, sv = score(chosen + [j])
+                    cand_rows.append((tuple(chosen + [j]), bp, tt, sv))
+            best = max(cand_rows, key=lambda r: (round(r[3], 1), r[1], -r[2]))
+            if chosen and round(best[3], 1) <= max(round(r[3], 1) for r in rows):
                 break                                  # 足しても良くならない
             chosen = list(best[0])
             rows += cand_rows
             if progress:
                 progress((step + 1) / m)
-    best = max(rows, key=lambda r: (round(r[1], 3), -len(r[0]), -r[2]))
+    best = max(rows, key=lambda r: (round(r[3], 1), round(r[1], 3), -len(r[0]), -r[2]))
     L, dem, hp, nc, cal, specs, src, S, ahd = score(best[0], keep=True)[2]
+    out_bound_served = best[3]
     out = finish(net, cfg, oc, L, dem, cal, specs, kw, on, target, seed)
     table = pd.DataFrame([{"使うポート": "・".join(str(cands["name"].iloc[j]) for j in r[0]), "ポート数": len(r[0]),
-                           "充足率（容量まで埋めたとき）": r[1], "平均移動時間(分/片道)": r[2]} for r in rows])
-    table = table.sort_values(["充足率（容量まで埋めたとき）", "ポート数", "平均移動時間(分/片道)"],
-                              ascending=[False, True, True]).reset_index(drop=True)
+                           "利用/日（容量まで埋めたとき）": r[3], "充足率（容量まで埋めたとき）": r[1],
+                           "平均移動時間(分/片道)": r[2]} for r in rows])
+    table = table.sort_values(["利用/日（容量まで埋めたとき）", "充足率（容量まで埋めたとき）", "ポート数",
+                               "平均移動時間(分/片道)"], ascending=[False, False, True, True]).reset_index(drop=True)
     out.update(dem=dem, specs=specs, kw=kw, on=on, L=L, S=S, cands=cs, assign=hp, assign_hd=ahd, hd=hd, purposes=purposes, dests=dests, vehicles=vehicles,
                n_cover=nc, cal=cal, source=src, target=target, k_max=k_max, conversion=conversion,
                n_houses=len(net.houses), n_hh=int((hp >= 0).sum()), cfg=cfg, method=method, table=table,

@@ -692,3 +692,33 @@ def test_evaluate_candidates_choice():
     assert 1 <= r["L"].k <= 2 and len(r["table"]) == 6                # 1か所3通り＋2か所3通り
     assert (r["init"][:r["L"].k].sum(1) <= 4).all() and r["init"][r["L"].k + 1].sum() <= 5
     assert set(r["chosen"]) <= {"A", "B", "C"}
+
+
+def test_backtrack_rule():
+    """反対方向のポートへ1分以上歩く住宅は使わない。目的地側にあるポートや近いポートは使う。"""
+    from src.geo import backtrack_mask
+    # 住宅 (0,0)、目的地は東。ポートA＝東に200m、B＝西に200m、C＝西に30m
+    lat0, lon0 = 36.11, 139.70
+    dlon = 200 / (111320 * np.cos(np.radians(lat0)))
+    hl, ho = np.array([lat0]), np.array([lon0])
+    pl, po = np.full(3, lat0), np.array([lon0 + dlon, lon0 - dlon, lon0 - dlon * 0.15])
+    walk = np.array([[2.5, 2.5, 0.4]])                         # 分
+    m = backtrack_mask(hl, ho, pl, po, lat0, lon0 + 5 * dlon, walk, 1.0)
+    assert m.tolist() == [[False, True, False]]
+    assert not backtrack_mask(hl, ho, pl, po, lat0, lon0 + 5 * dlon, walk, None).any()
+
+
+def test_leg_time_stats():
+    """片道ごとの移動時間・短縮時間の最大・最小が集計される。"""
+    from src.engine import simulate_days
+    from src.loaders import load_survey, survey_path
+    from src.plan import demand_hourly, fleet_for, make_ops, optimal_layout
+    net = _real_net()
+    c = {**CFG, "simulation": {**CFG["simulation"], "n_households": len(net.houses)}}
+    oh, rh, sh = demand_hourly(load_survey(survey_path(c)[0], c), c, 0.1, None, "平日")
+    L, _, _ = optimal_layout(net, c, sh, 3, None)
+    ops = make_ops(c)
+    r = simulate_days(L, fleet_for(L, 10, 6, oh, rh, ops, n_tr=4), ops, oh, rh, n_rep=5)
+    assert r["最小移動時間(分)"] <= r["平均移動時間(分/片道)"] <= r["最大移動時間(分)"]
+    assert r["最小短縮(分)"] <= r["全員徒歩の平均(分/片道)"] - r["平均移動時間(分/片道)"] <= r["最大短縮(分)"]
+    assert L.use is not None and (L.use <= 1).all()

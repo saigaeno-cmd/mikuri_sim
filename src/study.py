@@ -124,11 +124,11 @@ def min_fleet(L: Layout, ops: Ops, out_h, ret_h, targets=(0.05, 0.01, 0.20), n_r
                     nk -= 1
                 tot = nb + nk + ntr
                 local = tot if local is None else min(local, tot)
-                if nk == 0:                           # これ以上自転車を増やすと合計は増えるだけ
-                    break
                 gap = float(np.abs(np.array([nb, nk, ntr]) / tot - mix).sum()) if tot else 9.0
                 if best is None or tot < best[3] or (tot == best[3] and gap < best[4]):
                     best = (nb, nk, ntr, tot, gap)
+                if nk == 0:                           # これ以上自転車を増やすと合計は増えるだけ
+                    break
             # 4輪の台数に対して最小合計はおおむね谷形：2回続けて最良を下回らなければ打ち切る
             worse = 0 if (local is not None and local <= best[3]) else worse + 1 if best is not None else 0
         out[tgt] = None if best is None else {"自転車": best[0], "キックボード": best[1], "4輪": best[2], "合計": best[3],

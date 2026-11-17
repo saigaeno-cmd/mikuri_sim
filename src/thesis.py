@@ -47,7 +47,10 @@ def summary(R: dict) -> dict:
     return {"達成": sel is not None, "ポート数": R["L"].k, "合計台数": fl["合計"], "自転車": fl["自転車"],
             "キックボード": fl["キックボード"], "4輪": fl.get("4輪", 0), "充足率": ms["充足率"],
             "最大充足率": R.get("best_possible", np.nan), "駅ポート必要容量": R["station_need"],
-            "平均短縮移動時間": R["saving"], "利用/日": ms["利用"], "利用希望/日": ms["利用希望"],
+            "平均短縮移動時間": R["saving"], "最大短縮時間": ms.get("最大短縮(分)", np.nan),
+            "最小短縮時間": ms.get("最小短縮(分)", np.nan), "平均移動時間": ms["平均移動時間(分/片道)"],
+            "最大移動時間": ms.get("最大移動時間(分)", np.nan), "最小移動時間": ms.get("最小移動時間(分)", np.nan),
+            "徒歩だけの平均": ms["全員徒歩の平均(分/片道)"], "利用/日": ms["利用"], "利用希望/日": ms["利用希望"],
             "年間総費用(万円)": R["cost"]["年間総費用"] / 1e4, "1回あたり費用(円)": R["cost"]["1トリップあたり費用"],
             "対象の住宅": R.get("n_hh", np.nan)}
 
@@ -163,6 +166,11 @@ def case_sheet(R: dict, cfg, title: str, cond: str, stats: dict | None, roads=No
             ax.text(cx, 0.12, sub, fontsize=9.5, ha="center", va="center", transform=ax.transAxes, color=MUTED)
         if i:
             ax.plot([i * 0.25, i * 0.25], [0.15, 0.85], color=MUTED, lw=1, transform=ax.transAxes)
+    tl = (f"移動時間（片道）：平均 {ms['平均移動時間(分/片道)']:.1f}分・最大 {ms.get('最大移動時間(分)', np.nan):.1f}分・"
+          f"最小 {ms.get('最小移動時間(分)', np.nan):.1f}分（徒歩だけ 平均 {ms['全員徒歩の平均(分/片道)']:.1f}分）　／　"
+          f"短縮時間：平均 {R['saving']:.1f}分・最大 {ms.get('最大短縮(分)', np.nan):.1f}分・最小 {ms.get('最小短縮(分)', np.nan):.1f}分")
+    fig.text(0.97, 0.548, tl, fontsize=10.5, color=INK, va="center", ha="right",
+             bbox=dict(boxstyle="round,pad=0.35", fc="#F3F5F8", ec="none"))
     fig.text(0.03, 0.535, "ポート場所", fontsize=15, weight="bold", color=INK, va="center")
     _map(fig.add_axes([0.03, 0.03, 0.55, 0.49]), R, cfg, roads)
     fig.text(0.61, 0.535, "時間帯別の利用希望と充足", fontsize=12, weight="bold", color=INK, va="center")

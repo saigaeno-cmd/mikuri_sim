@@ -91,7 +91,27 @@ def dest_caps(cfg, station_cap=None) -> list:
     return [sc, cfg.get("service", {}).get("aeon_max_slots")]
 
 
-def _layout_from(net, cfg, W, R, E, assign, Walt, house_caps, station_cap, labels):
+def _use_frac(net, cfg, W, assign, port_ll) -> np.ndarray | None:
+    """(k, 2) 住宅側ポート j を使う住宅のうち、目的地 d へ使う割合（反対方向のポートへ設定の分数以上歩く住宅は使わない）。"""
+    from .geo import backtrack_limit, backtrack_mask, dest_point
+    lim = backtrack_limit(cfg)
+    if lim is None or port_ll is None:
+        return None
+    k = W.shape[1]
+    h = net.houses
+    rows = np.arange(len(assign))
+    vw = cfg["walk_speed_kmh"] * 1000 / 60
+    use = np.ones((k, len(DESTS)))
+    for d, key in enumerate(DESTS):
+        dl = dest_point(cfg, key)
+        bad = backtrack_mask(h["lat"], h["lon"], port_ll[:, 0], port_ll[:, 1], dl[0], dl[1], W / vw, lim)[rows, assign]
+        for j in range(k):
+            m = assign == j
+            use[j, d] = 1 - bad[m].mean() if m.any() else 1.0
+    return use
+
+
+def _layout_from(net, cfg, W, R, E, assign, Walt, house_caps, station_cap, labels, port_ll=None):
     k = W.shape[1]
     cnt = np.bincount(assign, minlength=k)
     rows = np.arange(len(assign))
@@ -101,7 +121,7 @@ def _layout_from(net, cfg, W, R, E, assign, Walt, house_caps, station_cap, label
     hc = [np.inf] * k if house_caps is None else [np.inf if (c is None or pd.isna(c)) else float(c) for c in house_caps]
     caps = np.array(hc + [np.inf if c is None else float(c) for c in dc])
     return Layout(k=k, share=cnt / len(assign), walk_m=walk_m, ride_m=R, egress_m=E, alt_m=alt_m, caps=caps,
-                  labels=labels or [f"P{j + 1}" for j in range(k)])
+                  labels=labels or [f"P{j + 1}" for j in range(k)], use=_use_frac(net, cfg, W, assign, port_ll))
 
 
 def optimal_layout(net: Network, cfg, shares, k: int, ebike_share: float, *, walk_kmh=None, weather=None,
@@ -115,7 +135,8 @@ def optimal_layout(net: Network, cfg, shares, k: int, ebike_share: float, *, wal
     sol = solve_pmedian(C, k)
     Walt = walk_alt_matrix(net, cfg) if Walt is None else Walt
     L = _layout_from(net, cfg, net.W[:, sol.ports], net.R[sol.ports][:, idx], net.E[idx], sol.assign, Walt,
-                     house_caps, station_cap, None)
+                     house_caps, station_cap, None,
+                     port_ll=net.candidates.loc[list(sol.ports), ["lat", "lon"]].to_numpy(float))
     return L, sol.ports, sol.assign
 
 
@@ -133,7 +154,8 @@ def custom_layout(net: Network, cfg, ports: pd.DataFrame, shares, ebike_share: f
     Walt = walk_alt_matrix(net, cfg) if Walt is None else Walt
     caps = ports["収納"].to_numpy() if "収納" in ports else None
     labels = list(ports["name"]) if "name" in ports else None
-    return _layout_from(net, cfg, W, R, E, assign, Walt, caps, station_cap, labels), assign
+    return _layout_from(net, cfg, W, R, E, assign, Walt, caps, station_cap, labels,
+                        port_ll=ports[["lat", "lon"]].to_numpy(float)), assign
 
 
 def route_kmh(cfg, weather: str | None = None) -> tuple:

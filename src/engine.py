@@ -81,6 +81,11 @@ class Layout:
     caps: np.ndarray           # (k+2,) 収納可能台数（np.inf=制限なし）。公園ポートなどを足すと (k+3,) …
     labels: list = field(default_factory=list)
     flows: list = field(default_factory=list)      # [Flow]
+    use: np.ndarray | None = None                  # (k, 2) 住宅側ポート j の住宅のうち、目的地 d へ使う割合（反対方向の判定）
+
+    def share_d(self, d: int) -> np.ndarray:
+        """目的地 d の住宅⇔目的地の需要の、住宅側ポートへの按分（使わない住宅を除いた割合）。"""
+        return self.share if self.use is None else self.share * self.use[:, d]
 
     @property
     def nport(self) -> int:
@@ -160,12 +165,12 @@ def _hourly_counts_need(L: Layout, ops, out_h, ret_h, n_samp: int, rng) -> np.nd
         dep = np.zeros((n_samp, npt, 24))
         arr = np.zeros((n_samp, npt, 24))
         for d, port in ((STATION, sp), (AEON, ap)):
-            lam = L.share[:, None] * out_h[None, :, d] * lam_t[t]               # (k, 24)
+            lam = L.share_d(d)[:, None] * out_h[None, :, d] * lam_t[t]               # (k, 24)
             c = rng.poisson(lam, size=(n_samp,) + lam.shape)
             dep[:, :k] += c
             arr[:, port] += c.sum(1)
             if ops.trip_type[d] == "one_way":
-                lamr = L.share[:, None] * ret_h[None, :, d] * lam_t[t]
+                lamr = L.share_d(d)[:, None] * ret_h[None, :, d] * lam_t[t]
                 r = rng.poisson(lamr, size=(n_samp,) + lamr.shape)
                 dep[:, port] += r.sum(1)
                 arr[:, :k] += r
@@ -346,6 +351,7 @@ class DayStats:
     port_peak: np.ndarray | None = None       # ポートごとの最大駐車台数（用地＝区画数の算定に使う）
     swaps: int = 0
     purpose: dict = field(default_factory=dict)   # 用途 -> [利用希望, 利用]（片道ごと）
+    leg_rec: list = field(default_factory=list)   # 片道ごとの (移動時間, 徒歩だけの時間)（分）
 
 
 def _truck(ops: Ops, moved) -> tuple[float, int]:
@@ -517,9 +523,9 @@ def simulate_day(layout: Layout, fleet: Fleet, ops: Ops, out_h: np.ndarray, ret_
 
     for d in (STATION, AEON):
         for t in range(O.nt):
-            gen("out", np.outer(L.share, out_h[:, d] * lam_t[t]), d, t)                 # (k, 24)
+            gen("out", np.outer(L.share_d(d), out_h[:, d] * lam_t[t]), d, t)                 # (k, 24)
             if O.trip_type[d] == "one_way":
-                gen("ret", np.outer(L.share, ret_h[:, d] * lam_t[t]), d, t)
+                gen("ret", np.outer(L.share_d(d), ret_h[:, d] * lam_t[t]), d, t)
     for i, f in enumerate(L.flows):                                                    # 用途別の流れ
         if out_h.shape[1] > 2 + i and out_h[:, 2 + i].sum() > 0:
             for t in range(O.nt):
@@ -613,10 +619,14 @@ def simulate_day(layout: Layout, fleet: Fleet, ops: Ops, out_h: np.ndarray, ret_
                 st.fail_out += kind == "fout"
                 st.fail_ret += kind == "fret"
                 st.hourly[h, 2] += 1
-                st.time_min += alt
+                _tm = alt
+                st.time_min += _tm
+                st.leg_rec.append((_tm, alt))
                 if kind == "fout" and f.round_trip:          # 帰りも徒歩
                     st.legs += 1
-                    st.time_min += alt
+                    _tm = alt
+                    st.time_min += _tm
+                    st.leg_rec.append((_tm, alt))
                     st.walk_only_min += alt
                 continue
             st.served_out += kind == "fout"
@@ -625,7 +635,9 @@ def simulate_day(layout: Layout, fleet: Fleet, ops: Ops, out_h: np.ndarray, ret_
             st.substitutions += sub
             st.rides_by_type[S.vtype[v]] += 1
             ride = O.procedure_min + f.ride_m[j] / vr[S.vtype[v]]
-            st.time_min += wa / vw + ride + wb / vw
+            _tm = wa / vw + ride + wb / vw
+            st.time_min += _tm
+            st.leg_rec.append((_tm, alt))
             push(now + ride, _ARR, ("arr", v, pb, km))
             if kind == "fout" and f.round_trip:
                 tr = now + ride + wb / vw + f.dwell_min * (0.5 + rng.random())    # 滞在：平均の0.5〜1.5倍
@@ -633,7 +645,9 @@ def simulate_day(layout: Layout, fleet: Fleet, ops: Ops, out_h: np.ndarray, ret_
                     push(tr, _REQ, ("fret", j, i, t))
                 else:
                     st.legs += 1
-                    st.time_min += alt
+                    _tm = alt
+                    st.time_min += _tm
+                    st.leg_rec.append((_tm, alt))
                     st.walk_only_min += alt
             continue
         _, j, d, t = item
@@ -650,10 +664,14 @@ def simulate_day(layout: Layout, fleet: Fleet, ops: Ops, out_h: np.ndarray, ret_
             if v is None:
                 st.fail_out += 1
                 st.hourly[h, 2] += 1
-                st.time_min += alt
+                _tm = alt
+                st.time_min += _tm
+                st.leg_rec.append((_tm, alt))
                 if O.trip_type[d] == "round_trip":   # 帰りも徒歩
                     st.legs += 1
-                    st.time_min += alt
+                    _tm = alt
+                    st.time_min += _tm
+                    st.leg_rec.append((_tm, alt))
                     st.walk_only_min += alt
                 continue
             st.served_out += 1
@@ -661,7 +679,9 @@ def simulate_day(layout: Layout, fleet: Fleet, ops: Ops, out_h: np.ndarray, ret_
             st.substitutions += sub
             st.rides_by_type[S.vtype[v]] += 1
             ride = O.procedure_min + L.ride_m[j, d] / speed(d, 0, S.vtype[v])
-            st.time_min += L.walk_m[j] / vw + ride + L.egress_m[d] / vw
+            _tm = L.walk_m[j] / vw + ride + L.egress_m[d] / vw
+            st.time_min += _tm
+            st.leg_rec.append((_tm, alt))
             push(now + ride, _ARR, ("arr", v, dport[d], km))
             if O.trip_type[d] == "round_trip":
                 w = ret_h[:, d]
@@ -674,7 +694,9 @@ def simulate_day(layout: Layout, fleet: Fleet, ops: Ops, out_h: np.ndarray, ret_
                     push(tr, _REQ, ("ret", j, d, t))
                 else:                                  # 帰りの需要が無い時間帯 → 徒歩で帰る
                     st.legs += 1
-                    st.time_min += alt
+                    _tm = alt
+                    st.time_min += _tm
+                    st.leg_rec.append((_tm, alt))
                     st.walk_only_min += alt
         else:  # 復路の利用希望（目的地ポート → 自宅側ポート j）
             st.req_ret += 1
@@ -683,20 +705,34 @@ def simulate_day(layout: Layout, fleet: Fleet, ops: Ops, out_h: np.ndarray, ret_
             if v is None:
                 st.fail_ret += 1
                 st.hourly[h, 2] += 1
-                st.time_min += alt
+                _tm = alt
+                st.time_min += _tm
+                st.leg_rec.append((_tm, alt))
                 continue
             st.served_ret += 1
             st.hourly[h, 1] += 1
             st.substitutions += sub
             st.rides_by_type[S.vtype[v]] += 1
             ride = O.procedure_min + L.ride_m[j, d] / speed(d, 1, S.vtype[v])
-            st.time_min += L.egress_m[d] / vw + ride + L.walk_m[j] / vw
+            _tm = L.egress_m[d] / vw + ride + L.walk_m[j] / vw
+            st.time_min += _tm
+            st.leg_rec.append((_tm, alt))
             push(now + ride, _ARR, ("arr", v, j, km))
     _night_reset(S, st)
     return st, S
 
 
 # ---------------------------------------------------------------- 集計
+def _leg_stats(days) -> dict:
+    """片道ごとの移動時間・短縮時間（徒歩だけ − 実際）の最大・最小。"""
+    rec = np.array([r for d in days for r in d.leg_rec], float).reshape(-1, 2)
+    if not len(rec):
+        return {k: np.nan for k in ("最大移動時間(分)", "最小移動時間(分)", "最大短縮(分)", "最小短縮(分)")}
+    sv = rec[:, 1] - rec[:, 0]
+    return {"最大移動時間(分)": float(rec[:, 0].max()), "最小移動時間(分)": float(rec[:, 0].min()),
+            "最大短縮(分)": float(sv.max()), "最小短縮(分)": float(sv.min())}
+
+
 def summarize(days: list[DayStats], fleet: Fleet) -> dict:
     g = lambda a: float(sum(getattr(d, a) for d in days))
     req = g("req_out") + g("req_ret")
@@ -731,6 +767,7 @@ def summarize(days: list[DayStats], fleet: Fleet) -> dict:
         "トラック往復/日": sum(o[3] for o in ops) / n_days,
         "電池交換/日": g("swaps") / n_days,
         "稼働率(回/台/日)": served / n_days / n_veh,
+        **_leg_stats(days),
         "_hourly": (np.mean([d.hourly for d in days], axis=0).tolist() if days else []),
         "_用途別": {lab: {"利用希望/日": q / n_days, "利用/日": s_ / n_days, "充足率": s_ / q if q else 1.0}
                   for lab, (q, s_) in pur.items()},
