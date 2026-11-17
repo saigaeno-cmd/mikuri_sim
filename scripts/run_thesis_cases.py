@@ -125,11 +125,11 @@ def main():
             "需要": f"①時間短縮（{p['A']:g}分・{p['X']:g}分）" if p["model"] == "time" else f"転換率{p['conversion']:.0%}",
             "ポート数": thesis._fmt_range(g["ポート数"].tolist()),
             "台数": (thesis._fmt_range(g.loc[ok, "合計台数"].tolist()) if ok.all() else
-                    f"達成不可（{ok.sum()}/{len(g)}回達成）" if ok.any() else "達成不可"),
+                    f"{len(g)}回中{ok.sum()}回達成" if ok.any() else "達成不可"),
             "内訳 自・キ・4輪": "・".join(f"{np.median(g.loc[ok if ok.any() else ~ok, k]):.0f}"
                                      for k in ("自転車", "キックボード", "4輪")),
             "充足率": thesis._fmt_range(g["充足率"].tolist(), pct=True),
-            "最大充足率": thesis._fmt_range(g["最大充足率"].tolist(), pct=True),
+            "上限の目安": thesis._fmt_range(g["最大充足率"].tolist(), pct=True),
             "駅必要容量": thesis._fmt_range(g["駅ポート必要容量"].tolist()),
             "平均短縮(分)": thesis._fmt_range(g["平均短縮移動時間"].tolist(), fmt="{:.1f}"),
             "年間費用(万円)": thesis._fmt_range(g["年間総費用(万円)"].tolist()),
@@ -160,7 +160,8 @@ def main():
         show = comp.drop(columns=["比較"])
         w = [0.04, 0.17, 0.11, 0.05, 0.1, 0.08, 0.07, 0.07, 0.07, 0.07, 0.08, 0.09]
         slides.append(thesis.table_slide("比較の表", show, sub=f"各ケース{a.reps}回の中央値（最小–最大）。"
-                                         f"台数＝目標充足率{tgt:.0%}を満たす最小台数（達成不可は容量まで埋めた参考の内訳）",
+                                         f"台数＝目標充足率{tgt:.0%}を満たす最小台数（達成不可は容量まで埋めた参考の内訳）。"
+                                         "上限の目安＝すべてのポートを容量まで埋めたときの充足率",
                                          col_w=w, fs=9, highlight=lambda i: show["ID"].iloc[i] == "S1"))
     curves = {}
     for cid, lab in (("S1", "低位12%"), ("A2", "高位24%")):

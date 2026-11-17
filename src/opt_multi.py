@@ -237,7 +237,8 @@ def period(cfg, oc, dem, kw, seed=0):
 def bound(L, ops, dem, specs, on, seed=0):
     """すべてのポートを上限まで埋め、駅にも余裕分を置いたときの充足率（上限の目安）と、その配置。"""
     peak = peak_outflow(*dem["平日"])
-    n_big = int(np.nansum(np.where(np.isfinite(L.caps), L.caps, 0)) + np.ceil(peak * 0.3) + 4)
+    real = np.isfinite(L.caps) & (L.caps < 900)     # 999 など「実質上限なし」は埋めない
+    n_big = int(np.sum(np.where(real, L.caps, 0)) + np.ceil(peak * 0.3) + 4)
     split = [n_big // sum(on) if o else 0 for o in on]
     split[[i for i, o in enumerate(on) if o][0]] += n_big - sum(split)
     F = allocate_fleet(L, ops, split[0], split[1], *dem["平日"], n_tr=split[2], seed=seed)
@@ -369,9 +370,10 @@ def evaluate_candidates(net, cfg, survey, cands: pd.DataFrame, *, dests, vehicle
     ops = make_ops(cfg, weather="晴れ", **kw)
     cache = {}
 
-    def score(idx):
+    def score(idx, keep=False):
+        """(上限の充足率, 平均移動時間, 中身)。中身（配置・需要）はメモリを使うので keep=True のときだけ返す。"""
         idx = tuple(sorted(idx))
-        if idx in cache:
+        if idx in cache and not keep:
             return cache[idx]
         S = list(idx)
         ahd = mob[:, S, :].argmin(1) if hd else np.zeros((len(net.houses), 0), int)
@@ -383,9 +385,12 @@ def evaluate_candidates(net, cfg, survey, cands: pd.DataFrame, *, dests, vehicle
             cache[idx] = (-1.0, 0.0, None)
             return cache[idx]
         cal, specs, src = period(cfg, oc, dem, kw, seed)
-        bp, _, tt = bound(L, ops, dem, specs, on, seed)
-        cache[idx] = (bp, tt, (L, dem, hp, nc, cal, specs, src, S, ahd))
-        return cache[idx]
+        if idx in cache:
+            bp, tt = cache[idx][:2]
+        else:
+            bp, _, tt = bound(L, ops, dem, specs, on, seed)
+        cache[idx] = (bp, tt, None)
+        return (bp, tt, (L, dem, hp, nc, cal, specs, src, S, ahd)) if keep else cache[idx]
 
     rows = []
     if combos is not None:
@@ -406,7 +411,7 @@ def evaluate_candidates(net, cfg, survey, cands: pd.DataFrame, *, dests, vehicle
             if progress:
                 progress((step + 1) / m)
     best = max(rows, key=lambda r: (round(r[1], 3), -len(r[0]), -r[2]))
-    L, dem, hp, nc, cal, specs, src, S, ahd = score(best[0])[2]
+    L, dem, hp, nc, cal, specs, src, S, ahd = score(best[0], keep=True)[2]
     out = finish(net, cfg, oc, L, dem, cal, specs, kw, on, target, seed)
     table = pd.DataFrame([{"使うポート": "・".join(str(cands["name"].iloc[j]) for j in r[0]), "ポート数": len(r[0]),
                            "充足率（容量まで埋めたとき）": r[1], "平均移動時間(分/片道)": r[2]} for r in rows])
